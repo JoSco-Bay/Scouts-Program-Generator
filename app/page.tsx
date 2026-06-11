@@ -110,7 +110,7 @@ export default function HomePage() {
         }
         .step-desc { font-size: 15px; line-height: 1.7; color: rgba(253,246,227,0.6); }
 
-        /* ── OAS STRIP ── */
+        /* ── SECTION COLOURS STRIP ── */
         .oas-bg { background: #1a1208; border-top: 1px solid rgba(253,230,138,0.08); border-bottom: 1px solid rgba(253,230,138,0.08); padding: 40px 0; }
         .oas-inner { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
         .oas-label {
@@ -126,18 +126,10 @@ export default function HomePage() {
           letter-spacing: 0.06em; transition: all 0.2s;
         }
         .oas-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-        .core-chip {
-          background: rgba(21,128,61,0.15); border: 1px solid rgba(21,128,61,0.4);
-          color: #86efac;
-        }
-        .core-chip:hover { background: rgba(21,128,61,0.25); }
-        .core-chip .oas-chip-dot { background: #22c55e; }
-        .spec-chip {
-          background: rgba(29,78,216,0.15); border: 1px solid rgba(29,78,216,0.4);
-          color: #93c5fd;
-        }
-        .spec-chip:hover { background: rgba(29,78,216,0.25); }
-        .spec-chip .oas-chip-dot { background: #60a5fa; }
+        .section-chip-joeys { background: rgba(193,127,36,0.15); border: 1px solid rgba(193,127,36,0.4); color: #fcd34d; }
+        .section-chip-cubs { background: rgba(232,184,0,0.15); border: 1px solid rgba(232,184,0,0.4); color: #fcd34d; }
+        .section-chip-scouts { background: rgba(107,191,90,0.15); border: 1px solid rgba(107,191,90,0.4); color: #86efac; }
+        .section-chip-venturers { background: rgba(181,72,94,0.15); border: 1px solid rgba(181,72,94,0.4); color: #fca5a5; }
 
         /* ── FEATURES ── */
         .features-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 20px; }
@@ -202,7 +194,6 @@ export default function HomePage() {
         .sample-table-cell { height: 7px; border-radius: 1px; background: rgba(44,26,6,0.1); flex: 1; }
         .sample-table-cell.b { background: rgba(44,26,6,0.2); max-width: 44px; }
 
-        .sample-text { color: rgba(253,246,227,0.75); }
         .sample-title { font-family: 'Teko', sans-serif; font-size: 28px; color: #fdf6e3; margin-bottom: 12px; }
         .sample-item { display: flex; gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.7; color: rgba(253,246,227,0.65); padding: 6px 0; border-bottom: 1px solid rgba(253,246,227,0.07); }
         .sample-item::before { content: '✓'; color: #d97706; flex-shrink: 0; }
@@ -277,7 +268,7 @@ export default function HomePage() {
         {/* NAV */}
         <nav className="nav">
           <a href="/" className="nav-logo">⚜ Scout Program Builder</a>
-          <a href="/builder" className="nav-cta">Start Building →</a>
+          <a href="/setup" className="nav-cta">Set Up Your Group →</a>
         </nav>
 
         {/* HERO */}
@@ -285,20 +276,19 @@ export default function HomePage() {
           <div className="hero-inner">
             <div className="hero-badge">
               <span>⚜</span>
-              <span>Scouts Australia · AI Program Planner</span>
+              <span>Scouts Australia · Term Planner & Run Sheet Generator</span>
             </div>
             <h1 className="hero-title">
               Plan Every
-              <em>Adventure.</em>
+              <em>Meeting.</em>
             </h1>
             <p className="hero-desc">
-              Generate complete, ready-to-run Scout programs — from a single session to a
-              full three-year plan — with OAS badge goals, timed run sheets, parade scripts,
-              and printable activity sheets.
+              Build a full term schedule and generate detailed, ready-to-run meeting programs —
+              with timed activity sheets, OAS badge goals, equipment lists, and leader notes.
             </p>
             <div className="hero-buttons">
-              <a href="/builder" className="btn-primary">
-                Start Planning <span>→</span>
+              <a href="/setup" className="btn-primary">
+                Set Up Your Group <span>→</span>
               </a>
               <a href="#how" className="btn-secondary">See how it works ↓</a>
             </div>
@@ -309,12 +299,12 @@ export default function HomePage() {
         <div className="hiw-bg" id="how">
           <div className="section">
             <span className="section-eyebrow">How it works</span>
-            <h2 className="section-title">Three steps to a <em>complete program</em></h2>
+            <h2 className="section-title">Three steps to a <em>complete term</em></h2>
             <div className="steps">
               {[
-                { n: "01", icon: "📋", title: "Fill in the details", desc: "Choose your section, planning horizon (single session through to 3 years), group size, session length, and overall theme. Takes less than 2 minutes." },
-                { n: "02", icon: "⚜️", title: "Select OAS badge goals", desc: "Pick from all 9 OAS streams and 9 stages using the visual badge picker. The planner threads them through your program automatically, building stage by stage." },
-                { n: "03", icon: "🗺️", title: "Generate and expand", desc: "Get your year overview instantly, then expand each term on demand. Every session includes run sheets, parade scripts, equipment lists, and printable activity sheets." },
+                { n: "01", icon: "📋", title: "Set up your group", desc: "Enter your group name, section, meeting day and time, and leader names. Takes under a minute. Your setup is saved so you can come back any time." },
+                { n: "02", icon: "🗓️", title: "Plan your term", desc: "Pick your term start and end dates. The planner builds your weekly schedule automatically, then lets you edit each row or click AI Suggest to fill in topics and OAS focus." },
+                { n: "03", icon: "⚜️", title: "Generate run sheets", desc: "Click Create Run Sheet on any week to generate a detailed, timed meeting program. Edit activities, add equipment notes, and print when ready." },
               ].map(s => (
                 <div key={s.n} className="step">
                   <span className="step-num">{s.n}</span>
@@ -327,33 +317,19 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* OAS STRIP */}
+        {/* SECTION STRIP */}
         <div className="oas-bg">
           <div className="oas-inner">
-            <span className="oas-label">Covers all OAS activity streams · 9 stages each</span>
+            <span className="oas-label">Works for all Scouts Australia sections</span>
             <div className="oas-chips">
               {[
-                { label: "Bushcraft", core: true },
-                { label: "Bushwalking", core: true },
-                { label: "Camping", core: true },
-                { label: "Pioneering", core: true },
-                { label: "Survival Skills", core: true },
-                { label: "Alpine", core: false },
-                { label: "Aquatics", core: false },
-                { label: "Boating", core: false },
-                { label: "Cycling", core: false },
-                { label: "Paddling", core: false },
-                { label: "Vertical", core: false },
-                { label: "Sailing", core: false },
-                { label: "Abseiling", core: false },
-                { label: "Rock Climbing", core: false },
-                { label: "Canoeing", core: false },
-                { label: "Kayaking", core: false },
-                { label: "Mountain Biking", core: false },
-                { label: "Cross Country Skiing", core: false },
+                { label: "Joeys · 5–8 yrs", cls: "section-chip-joeys", dot: "#C17F24" },
+                { label: "Cubs · 8–11 yrs", cls: "section-chip-cubs", dot: "#E8B800" },
+                { label: "Scouts · 11–15 yrs", cls: "section-chip-scouts", dot: "#6BBF5A" },
+                { label: "Venturers · 15–18 yrs", cls: "section-chip-venturers", dot: "#B5485E" },
               ].map(c => (
-                <span key={c.label} className={`oas-chip ${c.core ? "core-chip" : "spec-chip"}`}>
-                  <span className="oas-chip-dot" />
+                <span key={c.label} className={`oas-chip ${c.cls}`}>
+                  <span className="oas-chip-dot" style={{ background: c.dot }} />
                   {c.label}
                 </span>
               ))}
@@ -369,32 +345,32 @@ export default function HomePage() {
             <div className="feat feat-wide">
               <div>
                 <span className="feat-icon">🗓️</span>
-                <div className="feat-title">Term & Year Planning</div>
-                <p className="feat-desc">Plan a single session, a full term, a whole year, or up to three years at once. Year plans generate an overview first, then you expand each term on demand — so you never wait for content you don't need yet.</p>
+                <div className="feat-title">Term Schedule Builder</div>
+                <p className="feat-desc">Pick your term dates and your meeting day — the planner builds the full weekly schedule automatically. Edit any row inline: change the topic, location, OAS focus, equipment list, or assigned leader.</p>
                 <div className="feat-tags">
-                  <span className="feat-tag">Single Session</span>
-                  <span className="feat-tag">Term Plan</span>
-                  <span className="feat-tag">Year Plan</span>
-                  <span className="feat-tag">3-Year Plan</span>
+                  <span className="feat-tag">Auto Dates</span>
+                  <span className="feat-tag">Inline Edit</span>
+                  <span className="feat-tag">Consent Flags</span>
+                  <span className="feat-tag">Extra Events</span>
                 </div>
               </div>
               <div>
-                <span className="feat-icon">⚜️</span>
-                <div className="feat-title">OAS Badge Integration</div>
-                <p className="feat-desc">Select badge goals from all 9 OAS streams and the planner threads them intelligently across your sessions — building stage by stage, never repeating, and flagging sign-off milestones.</p>
+                <span className="feat-icon">✨</span>
+                <div className="feat-title">AI Theme Suggestions</div>
+                <p className="feat-desc">Click AI Suggest Themes and the planner fills in a progressive sequence of topics and OAS focus areas for your whole term — tailored to your section, building skills week by week.</p>
                 <div className="feat-tags">
-                  <span className="feat-tag">All 9 streams</span>
-                  <span className="feat-tag">Stages 1–9</span>
-                  <span className="feat-tag">Custom goals</span>
+                  <span className="feat-tag">OAS Linked</span>
                   <span className="feat-tag">Progressive</span>
+                  <span className="feat-tag">Editable</span>
+                  <span className="feat-tag">Section Aware</span>
                 </div>
               </div>
             </div>
             {[
-              { icon: "⏱️", title: "Timed Run Sheets", desc: "Minute-by-minute schedule tables for every session — from opening parade to closing circle. Pick up and run." },
-              { icon: "🎖️", title: "Parade Scripts", desc: "Full opening and closing parade procedures with flag ceremony, Scout Promise, reflection prompts, and announcement templates." },
-              { icon: "🎒", title: "Equipment Lists", desc: "Complete gear lists grouped by From the Shed, Leaders to Bring, and Consumables. Nothing forgotten." },
-              { icon: "🖨️", title: "Printable Activity Sheets", desc: "Click any activity to open a full detail page with instructions, leader script, and a printable worksheet when needed — nature puzzles, cipher sheets, first aid scenarios and more." },
+              { icon: "⏱️", title: "Timed Run Sheets", desc: "Click Create Run Sheet on any term row to generate a minute-by-minute activity schedule — opening parade, main activities, closing parade — ready to print and run." },
+              { icon: "⚜️", title: "OAS Badge Integration", desc: "Every activity links to an OAS stream and stage so leaders can track badge progress across the term without extra paperwork." },
+              { icon: "🎒", title: "Equipment Lists", desc: "Each run sheet includes what to bring, what to prep, and notes for the lead leader — so nothing gets forgotten on the night." },
+              { icon: "✏️", title: "Fully Editable", desc: "Every field is editable inline. Change times, add notes, reorder activities, flag consent required — full control without starting over." },
             ].map(f => (
               <div key={f.title} className="feat">
                 <span className="feat-icon">{f.icon}</span>
@@ -409,13 +385,12 @@ export default function HomePage() {
         <div className="sample-bg">
           <div className="section">
             <span className="section-eyebrow">What it produces</span>
-            <h2 className="section-title">A real document, <em>not a summary</em></h2>
+            <h2 className="section-title">A real run sheet, <em>not a summary</em></h2>
             <div className="sample-grid">
-              {/* Mock document */}
               <div className="sample-card">
                 <div className="sample-card-head">
-                  <div className="sample-card-eyebrow">⚜ Generated Program</div>
-                  <div className="sample-card-title">Scout <em>Session Plan</em></div>
+                  <div className="sample-card-eyebrow">⚜ Generated Run Sheet</div>
+                  <div className="sample-card-title">Scout <em>Meeting Program</em></div>
                 </div>
                 <div className="sample-card-body">
                   {[1,0.85,0.7,1,0.6,0.8].map((w,i) => (
@@ -437,18 +412,17 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-              {/* Feature list */}
               <div>
-                <div className="sample-title">Every session includes:</div>
+                <div className="sample-title">Every run sheet includes:</div>
                 {[
-                  "Session objectives linked to OAS stage requirements",
-                  "Full timed run sheet — minute by minute",
-                  "Opening parade with flag ceremony script",
+                  "Opening parade with flag ceremony notes",
                   "Coming-in activity with full instructions",
-                  "Main activities with equipment and safety notes",
-                  "Closing parade and reflection questions",
-                  "Equipment list grouped by source",
-                  "Clickable activities open printable sheets",
+                  "Main activities timed to the minute",
+                  "OAS badge stage linked to each activity",
+                  "Equipment and items to bring",
+                  "Leader notes for setup and debrief",
+                  "Closing parade and reflection prompt",
+                  "Fully editable before you print",
                 ].map((item,i) => (
                   <div key={i} className="sample-item">{item}</div>
                 ))}
@@ -462,11 +436,11 @@ export default function HomePage() {
           <div className="cta-card">
             <div className="cta-left">
               <div className="cta-eyebrow">Ready when you are</div>
-              <h2 className="cta-title">Build your next<br /><em>program now</em></h2>
-              <p className="cta-desc">Takes less than 2 minutes to fill in. Your complete program generates in seconds — OAS goals, run sheets, parade scripts and all.</p>
+              <h2 className="cta-title">Build your next<br /><em>term now</em></h2>
+              <p className="cta-desc">Takes less than 2 minutes to set up. Your full term schedule generates instantly — then click any week to create a detailed run sheet.</p>
             </div>
-            <a href="/builder" className="cta-btn">
-              <span>Start Building</span>
+            <a href="/setup" className="cta-btn">
+              <span>Set Up Your Group</span>
               <span className="cta-btn-arrow">→</span>
             </a>
           </div>
