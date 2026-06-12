@@ -392,12 +392,17 @@ export default function TermPage() {
         @media print {
           .nav, .ph, .setup-card, .toolbar, .theme-panel, .add-row, .leg, .act-col, th:last-child, td:last-child { display: none !important; }
           body { background: #fff; }
-          .body { max-width: 100%; padding: 0; }
+          .body { max-width: 100%; padding: 12px 0; }
           .term-card { border: none; }
-          .term-head { border-left: 4px solid ${acc}; }
-          table { font-size: 10px; }
-          th, td { padding: 5px 6px; }
-          .term-card, .term-head, table, thead, tbody, tr, td, th { break-inside: avoid; }
+          .term-head { border-left: 4px solid ${acc}; padding: 14px 16px; }
+          table { font-size: 11px; }
+          th { padding: 8px 8px; }
+          td { padding: 10px 8px; line-height: 1.6; }
+          .dm { font-size: 12px; margin-bottom: 2px; }
+          .dt { font-size: 10px; }
+          tr.session td, tr.extra td { border-bottom: 1px solid #e5e7eb; }
+          .term-card, .term-head { break-inside: avoid; }
+          tr { break-inside: avoid; }
         }
         .upload-input{display:none;}
       `}</style>
@@ -467,8 +472,7 @@ export default function TermPage() {
               )}
             </div>
             <div className="tl">
-              <button className="tbtn" onClick={()=>window.print()}>🖨 Print</button>
-              <button className="tbtn pri" style={{background:acc}} onClick={()=>window.print()}>⬇ PDF</button>
+              <button className="tbtn pri" style={{background:acc}} onClick={()=>window.print()}>🖨 Print / Save as PDF</button>
               <button className="tbtn" onClick={downloadPlan} title="Save this term plan as a file you can re-upload later">💾 Save plan</button>
               <button className="tbtn" onClick={()=>fileInputRef.current?.click()} title="Load a previously saved term plan">📂 Load plan</button>
               <input ref={fileInputRef} type="file" accept=".json" className="upload-input" onChange={handleUpload}/>

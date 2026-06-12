@@ -290,12 +290,16 @@ export default function RunSheetPage() {
         @media print {
           .nav, .ph, .gen-card, .add-row, .av-actions, .edit-btn, .del-btn, .act-edit, .list-del, .list-add { display: none !important; }
           body { background: #fff; }
-          .body { max-width: 100%; padding: 0; }
+          .body { max-width: 100%; padding: 12px 0; }
           .sheet-card { border: none; }
-          .sheet-head { background: ${NAVY} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sbar { background: var(--acc) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sheet-head { background: ${NAVY} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 16px 18px; }
+          .sbar { background: var(--acc) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px 18px; margin-top: 6px; }
           .pill, .pill.acc, .atag.oas, .ca-chip.on { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .activity, .list-section, .ca-row, .pal-grid { break-inside: avoid; }
+          .activity, .list-section, .ca-row, .pal-grid { break-inside: avoid; padding-top: 10px; padding-bottom: 10px; }
+          .act-view { padding: 4px 0; }
+          .av-body { padding: 6px 8px 6px 0; }
+          .av-detail { line-height: 1.75; }
+          .list-item { padding: 5px 0; }
           .list-text-input { border: none !important; }
         }
       `}</style>
@@ -307,8 +311,7 @@ export default function RunSheetPage() {
         </div>
         <div className="nav-r">
           <button className="back-btn" onClick={()=>router.push('/term')}>← Term plan</button>
-          <button className="nav-btn" onClick={()=>window.print()}>🖨 Print</button>
-          <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
+          <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>🖨 Print / Save as PDF</button>
           {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}
         </div>
       </nav>
