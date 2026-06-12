@@ -15,6 +15,14 @@ export default function RunSheetPage() {
   const [generated, setGenerated] = useState(false);
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editDraft, setEditDraft] = useState<Partial<ActivityRow>>({});
+  const [genError, setGenError] = useState('');
+
+  // Quick-create form state (used when there's no term row source)
+  const [quickTopic, setQuickTopic] = useState('');
+  const [quickDate, setQuickDate] = useState('');
+  const [quickTime, setQuickTime] = useState('6:00pm');
+  const [quickLocation, setQuickLocation] = useState('Hall');
+  const [quickOas, setQuickOas] = useState('');
 
   useEffect(() => {
     const cfg = localStorage.getItem('scoutGroupConfig');
@@ -29,20 +37,50 @@ export default function RunSheetPage() {
 
   const acc = config ? SECTION_COLOURS[config.section as Section].accent : '#C17F24';
 
-  const generate = async () => {
-    if (!source) return;
+  const generate = async (rowOverride?: TermRow) => {
+    const activeRow = rowOverride || source?.row;
+    const activeConfig = source?.config || config;
+    if (!activeRow || !activeConfig) return;
     setGenerating(true);
+    setGenError('');
     try {
       const res = await fetch('/api/generate-runsheet', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ row: source.row, config: source.config }),
+        body: JSON.stringify({ row: activeRow, config: activeConfig }),
       });
-      const data = await res.json();
-      if (data.activities) {
-        setActivities(data.activities);
-        setGenerated(true);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`API error ${res.status}: ${text.slice(0,200)}`);
       }
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.activities || !Array.isArray(data.activities)) {
+        throw new Error('No activities returned from AI');
+      }
+      setSource({ row: activeRow, config: activeConfig });
+      setActivities(data.activities);
+      setGenerated(true);
+    } catch (err: any) {
+      setGenError(err.message || 'Something went wrong generating the run sheet. Please try again.');
     } finally { setGenerating(false); }
+  };
+
+  const generateQuick = () => {
+    if (!config) return;
+    const quickRow: TermRow = {
+      id: genId(),
+      date: quickDate || new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}),
+      time: quickTime,
+      topic: quickTopic || 'Scout meeting',
+      location: quickLocation,
+      oasFocus: quickOas,
+      bring: '',
+      leader: config.leaders[0] || '',
+      assistantPatrol: '',
+      consentRequired: false,
+      rowType: 'session',
+    };
+    generate(quickRow);
   };
 
   const startEdit = (a: ActivityRow) => { setEditingId(a.id); setEditDraft({...a}); };
@@ -141,6 +179,13 @@ export default function RunSheetPage() {
         .add-row{padding:10px 16px;border-top:1px solid #f3f4f6;display:flex;gap:8px;background:#f9fafb;}
         .add-btn{font-size:12px;padding:5px 10px;border-radius:5px;border:1px dashed #d1d5db;background:transparent;color:#6b7280;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
         .add-btn:hover{border-color:var(--acc);color:var(--acc);}
+        .gen-btn:disabled{opacity:0.6;cursor:not-allowed;}
+        .gen-error{background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-size:12px;padding:8px 12px;border-radius:6px;margin-top:14px;text-align:left;}
+        .qf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;text-align:left;}
+        .qf-field{display:flex;flex-direction:column;gap:4px;}
+        .qf-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;}
+        .qf-field input{border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:13px;color:#111;font-family:inherit;outline:none;}
+        .qf-field input:focus{border-color:var(--acc);}
       `}</style>
 
       <nav className="nav">
@@ -158,9 +203,44 @@ export default function RunSheetPage() {
       <div className="body">
         <div className="toolbar">
           <div className="tlabel">
-            {row?.topic || 'Run sheet'} · {row?.date}
+            {row?.topic || 'Run sheet'}{row?.date ? ` · ${row.date}` : ''}
           </div>
         </div>
+
+        {!row && !generating && !generated && (
+          <div className="gen-card">
+            <div className="gen-title">Create a run sheet</div>
+            <div className="gen-desc" style={{marginBottom:'16px'}}>
+              No session selected from a term plan — fill in the details below and AI will generate a complete run sheet.
+            </div>
+            <div className="qf-grid">
+              <div className="qf-field">
+                <div className="qf-label">Topic / theme</div>
+                <input value={quickTopic} onChange={e=>setQuickTopic(e.target.value)} placeholder="e.g. Camp cooking"/>
+              </div>
+              <div className="qf-field">
+                <div className="qf-label">OAS focus (optional)</div>
+                <input value={quickOas} onChange={e=>setQuickOas(e.target.value)} placeholder="e.g. Camping S1"/>
+              </div>
+              <div className="qf-field">
+                <div className="qf-label">Date</div>
+                <input type="date" value={quickDate} onChange={e=>setQuickDate(e.target.value)}/>
+              </div>
+              <div className="qf-field">
+                <div className="qf-label">Time</div>
+                <input value={quickTime} onChange={e=>setQuickTime(e.target.value)} placeholder="e.g. 6:00pm"/>
+              </div>
+              <div className="qf-field" style={{gridColumn:'span 2'}}>
+                <div className="qf-label">Location</div>
+                <input value={quickLocation} onChange={e=>setQuickLocation(e.target.value)} placeholder="e.g. Hall"/>
+              </div>
+            </div>
+            <button className="gen-btn" onClick={generateQuick} disabled={!quickTopic}>
+              Generate run sheet →
+            </button>
+            {genError && <div className="gen-error">⚠ {genError}</div>}
+          </div>
+        )}
 
         {!generated && !generating && row && (
           <div className="gen-card">
@@ -171,9 +251,10 @@ export default function RunSheetPage() {
               equipment lists, opening and closing parades, and optional games.
               {row.oasFocus && ` OAS focus: ${row.oasFocus}.`}
             </div>
-            <button className="gen-btn" onClick={generate}>
+            <button className="gen-btn" onClick={()=>generate()}>
               Generate run sheet →
             </button>
+            {genError && <div className="gen-error">⚠ {genError}</div>}
           </div>
         )}
 
