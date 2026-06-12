@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const SECTION_COLOURS: Record<string,{accent:string;pale:string;text:string}> = {
@@ -72,6 +72,63 @@ export default function TermPage() {
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
   const [aiError, setAiError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadPlan = () => {
+    const payload = {
+      type: 'scout-program-builder-term-plan',
+      version: 1,
+      savedAt: new Date().toISOString(),
+      termName,
+      startDate,
+      endDate,
+      config,
+      rows,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (termName || 'term-plan').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    a.href = url;
+    a.download = `${safeName}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const data = JSON.parse(text);
+        if (data.type !== 'scout-program-builder-term-plan') {
+          alert('This file doesn\'t look like a Scout Program Builder term plan.');
+          return;
+        }
+        if (data.termName) setTermName(data.termName);
+        if (data.startDate) setStartDate(data.startDate);
+        if (data.endDate) setEndDate(data.endDate);
+        if (data.config) {
+          setConfig(data.config);
+          localStorage.setItem('scoutGroupConfig', JSON.stringify(data.config));
+        }
+        if (data.rows) {
+          setRows(data.rows);
+          setDatesSet(true);
+          localStorage.setItem('termRows', JSON.stringify(data.rows));
+        }
+      } catch (err) {
+        alert('Could not read this file — it may be corrupted or not a valid term plan file.');
+      }
+    };
+    reader.readAsText(file);
+    // reset input so the same file can be re-uploaded if needed
+    e.target.value = '';
+  };
 
   useEffect(()=>{
     const c=localStorage.getItem('scoutGroupConfig'); if(c) setConfig(JSON.parse(c));
@@ -330,6 +387,19 @@ export default function TermPage() {
         .skip-row{display:flex;justify-content:center;margin:10px 0 0;}
         .skip-link{font-size:12px;color:#9ca3af;cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline;}
         .skip-link:hover{color:${acc};}
+
+        /* Print styles */
+        @media print {
+          .nav, .ph, .setup-card, .toolbar, .theme-panel, .add-row, .leg, .act-col, th:last-child, td:last-child { display: none !important; }
+          body { background: #fff; }
+          .body { max-width: 100%; padding: 0; }
+          .term-card { border: none; }
+          .term-head { border-left: 4px solid ${acc}; }
+          table { font-size: 10px; }
+          th, td { padding: 5px 6px; }
+          .term-card, .term-head, table, thead, tbody, tr, td, th { break-inside: avoid; }
+        }
+        .upload-input{display:none;}
       `}</style>
 
       <nav className="nav">
@@ -397,8 +467,11 @@ export default function TermPage() {
               )}
             </div>
             <div className="tl">
-              <button className="tbtn">🖨 Print</button>
-              <button className="tbtn pri" style={{background:acc}}>⬇ PDF</button>
+              <button className="tbtn" onClick={()=>window.print()}>🖨 Print</button>
+              <button className="tbtn pri" style={{background:acc}} onClick={()=>window.print()}>⬇ PDF</button>
+              <button className="tbtn" onClick={downloadPlan} title="Save this term plan as a file you can re-upload later">💾 Save plan</button>
+              <button className="tbtn" onClick={()=>fileInputRef.current?.click()} title="Load a previously saved term plan">📂 Load plan</button>
+              <input ref={fileInputRef} type="file" accept=".json" className="upload-input" onChange={handleUpload}/>
             </div>
           </div>
 
@@ -580,10 +653,15 @@ export default function TermPage() {
               <div className="empty-title">Enter your term dates above</div>
               <div className="empty-desc">The app will generate all your {config?.meetingDay||'weekly'} meeting dates automatically</div>
             </div>
-            <div className="skip-row">
+            <div className="skip-row" style={{gap:'16px',flexWrap:'wrap'}}>
+              <button className="skip-link" onClick={()=>fileInputRef.current?.click()}>
+                📂 Load a previously saved term plan
+              </button>
+              <span style={{color:'#e5e7eb'}}>·</span>
               <button className="skip-link" onClick={()=>router.push('/runsheet')}>
                 Skip term planning — create a single run sheet instead →
               </button>
+              <input ref={fileInputRef} type="file" accept=".json" className="upload-input" onChange={handleUpload}/>
             </div>
           </>
         )}

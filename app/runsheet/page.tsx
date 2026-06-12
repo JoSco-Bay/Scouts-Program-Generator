@@ -116,6 +116,28 @@ export default function RunSheetPage() {
   const row = source?.row;
   const groupConfig = source?.config || config;
 
+  const downloadRunSheet = () => {
+    if (!data || !row) return;
+    const payload = {
+      type: 'scout-program-builder-run-sheet',
+      version: 1,
+      savedAt: new Date().toISOString(),
+      row,
+      config: groupConfig,
+      data,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (row.topic || 'run-sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    a.href = url;
+    a.download = `${safeName}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // Editable list sections (plan, review, participate, assist, lead, itemsRequired)
   const updateListItem = (key: keyof RunSheetData, idx: number, value: string) => {
     if(!data) return;
@@ -264,6 +286,18 @@ export default function RunSheetPage() {
           .items-grid{grid-template-columns:1fr;}
           .qf-grid{grid-template-columns:1fr;}
         }
+
+        @media print {
+          .nav, .ph, .gen-card, .add-row, .av-actions, .edit-btn, .del-btn, .act-edit, .list-del, .list-add { display: none !important; }
+          body { background: #fff; }
+          .body { max-width: 100%; padding: 0; }
+          .sheet-card { border: none; }
+          .sheet-head { background: ${NAVY} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sbar { background: var(--acc) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pill, .pill.acc, .atag.oas, .ca-chip.on { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .activity, .list-section, .ca-row, .pal-grid { break-inside: avoid; }
+          .list-text-input { border: none !important; }
+        }
       `}</style>
 
       <nav className="nav">
@@ -273,8 +307,9 @@ export default function RunSheetPage() {
         </div>
         <div className="nav-r">
           <button className="back-btn" onClick={()=>router.push('/term')}>← Term plan</button>
-          <button className="nav-btn">🖨 Print</button>
-          <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}}>⬇ PDF</button>
+          <button className="nav-btn" onClick={()=>window.print()}>🖨 Print</button>
+          <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
+          {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}
         </div>
       </nav>
 
