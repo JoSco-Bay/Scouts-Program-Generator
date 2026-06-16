@@ -12,13 +12,13 @@ const SECTION_COLOURS: Record<string,{accent:string;pale:string;text:string}> = 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
 interface GroupConfig { groupName:string; section:string; meetingDay:string; meetingTime:string; leaders:string[]; members:string[]; }
-interface TermRow { id:string; date:string; time:string; topic:string; location:string; oasFocus:string; bring:string; leader:string; assistantPatrol:string; consentRequired:boolean; rowType:'session'|'extra'; }
+interface TermRow { id:string; date:string; time:string; topic:string; location:string; oasFocus:string; sessionNotes:string; bring:string; leader:string; assistantPatrol:string; consentRequired:boolean; rowType:'session'|'extra'; }
 
 const COLUMN_DEFS = [
   { key:'date', label:'Date', width:'88px', always:true },
   { key:'topic', label:'Topic / theme', width:'190px', always:true },
   { key:'location', label:'Location', width:'80px' },
-  { key:'oasFocus', label:'OAS focus', width:'90px' },
+  { key:'focusNotes', label:'Focus & notes', width:'130px' },
   { key:'bring', label:'Bring', width:'100px' },
   { key:'leader', label:'Leader', width:'68px' },
   { key:'assistantPatrol', label:'Asst. patrol', width:'74px' },
@@ -144,7 +144,7 @@ export default function TermPage() {
     const dates = getMeetingDates(startDate, endDate, config.meetingDay);
     const newRows: TermRow[] = dates.map(d=>({
       id:genId(), date:d.date, time:fmt12(config.meetingTime),
-      topic:'', location:'Hall', oasFocus:'', bring:'',
+      topic:'', location:'Hall', oasFocus:'', sessionNotes:'', bring:'',
       leader:config.leaders[0]||'', assistantPatrol:'',
       consentRequired:false, rowType:'session',
     }));
@@ -158,7 +158,7 @@ export default function TermPage() {
   const deleteRow=(id:string)=>{ if(confirm('Remove this row?')) saveRows(rows.filter(r=>r.id!==id)); };
 
   const addRow=(type:'session'|'extra')=>{
-    const nr:TermRow={id:genId(),date:'',time:type==='session'?fmt12(config?.meetingTime||'18:00'):'',topic:'',location: type==='session'?'Hall':'',oasFocus:'',bring:'',leader:config?.leaders[0]||'',assistantPatrol:'',consentRequired:false,rowType:type};
+    const nr:TermRow={id:genId(),date:'',time:type==='session'?fmt12(config?.meetingTime||'18:00'):'',topic:'',location: type==='session'?'Hall':'',oasFocus:'',sessionNotes:'',bring:'',leader:config?.leaders[0]||'',assistantPatrol:'',consentRequired:false,rowType:type};
     const updated=[...rows,nr]; saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
   };
 
@@ -573,7 +573,15 @@ export default function TermPage() {
                               {row.consentRequired&&<div><span className="ctag">⚠ Consent</span></div>}
                             </td>
                           );
-                          if(c.key==='oasFocus') return <td key="oasFocus">{row.oasFocus?<span className="otag">{row.oasFocus}</span>:'—'}</td>;
+                          if(c.key==='focusNotes') return (
+                            <td key="focusNotes">
+                              {row.oasFocus && <div><span className="otag" style={{marginBottom:'3px',display:'inline-block'}}>{row.oasFocus}</span></div>}
+                              {row.sessionNotes
+                                ? <span style={{fontSize:'11px',color:'#6b7280',lineHeight:'1.4',display:'block'}}>{row.sessionNotes.length>60?row.sessionNotes.slice(0,60)+'…':row.sessionNotes}</span>
+                                : (!row.oasFocus && '—')
+                              }
+                            </td>
+                          );
                           if(c.key==='location') return <td key="location">{row.location||'—'}</td>;
                           if(c.key==='bring') return <td key="bring">{row.bring||'—'}</td>;
                           if(c.key==='leader') return <td key="leader">{row.leader||'—'}</td>;
@@ -603,8 +611,15 @@ export default function TermPage() {
                               </div>
                               <div className="ef3">
                                 <div><div className="efl">Topic / theme</div><input className="efi" value={editDraft.topic||''} onChange={e=>setEditDraft(d=>({...d,topic:e.target.value}))}/></div>
-                                <div><div className="efl">OAS focus</div><input className="efi" value={editDraft.oasFocus||''} onChange={e=>setEditDraft(d=>({...d,oasFocus:e.target.value}))}/></div>
+                                <div><div className="efl">OAS focus</div><input className="efi" value={editDraft.oasFocus||''} onChange={e=>setEditDraft(d=>({...d,oasFocus:e.target.value}))} placeholder="e.g. Bushcraft S1"/></div>
                                 <div><div className="efl">Bring</div><input className="efi" value={editDraft.bring||''} onChange={e=>setEditDraft(d=>({...d,bring:e.target.value}))}/></div>
+                              </div>
+                              <div style={{marginBottom:'8px'}}>
+                                <div className="efl" style={{marginBottom:'3px'}}>Session notes <span style={{fontSize:'10px',color:'#9ca3af',fontWeight:'400',textTransform:'none',letterSpacing:0}}>— what to include, specific skills, context for AI run sheet generation</span></div>
+                                <textarea className="efi" style={{resize:'vertical',minHeight:'68px',lineHeight:'1.55'}}
+                                  value={editDraft.sessionNotes||''}
+                                  onChange={e=>setEditDraft(d=>({...d,sessionNotes:e.target.value}))}
+                                  placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple. Have rope cut into 60cm lengths before session."/>
                               </div>
                               <div className="ef2">
                                 <div><div className="efl">Leader</div><input className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}/></div>

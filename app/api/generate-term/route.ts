@@ -35,11 +35,11 @@ For each of the ${rowCount} sessions, provide:
 Return ONLY valid JSON with this exact structure, no markdown, no explanation:
 {
   "suggestions": [
-    { "topic": "...", "oasFocus": "...", "location": "...", "bring": "..." }
+    { "topic": "...", "oasFocus": "...", "location": "...", "bring": "...", "notes": "One sentence of specific context for this session, e.g. what skills to focus on or what to prepare" }
   ]
 }
 
-The "suggestions" array must have exactly ${rowCount} items, in a sensible progressive order (build skills week to week where relevant).`;
+The "suggestions" array must have exactly ${rowCount} items. The "notes" field should give one sentence of specific helpful context a leader could use to prep for that session, in a sensible progressive order (build skills week to week where relevant).`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

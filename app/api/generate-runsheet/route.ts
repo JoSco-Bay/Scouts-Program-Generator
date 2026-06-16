@@ -33,6 +33,7 @@ Date: ${row.date || 'TBC'}
 Start time: ${row.time || '6:00pm'}
 Location: ${row.location || 'Hall'}
 OAS Focus: ${row.oasFocus || 'General'}
+Session notes from leader: ${row.sessionNotes || 'None'}
 Leader: ${row.leader || 'Leader'}
 Assistant Patrol Leader: ${row.assistantPatrol || 'None'}
 
@@ -78,6 +79,8 @@ GUIDELINES — follow the real Scout session format closely:
 - review: 2-4 short reflection prompts a leader could ask the group at the end
 - participate/assist/lead: 2-3 short phrases each, age-appropriate, describing how a member could engage at each level for THIS topic specifically (not generic)
 - itemsRequired: 4-8 concrete physical items needed for tonight's activities
+
+IMPORTANT: If 'Session notes from leader' contains specific instructions (e.g. 'include reef knot', 'Joeys are new so keep it simple', 'have rope pre-cut'), follow them closely — they override generic suggestions. The leader knows their group.
 
 Write in the same plain, practical, slightly informal tone real Scout leaders use — short sentences, equipment lists, step-by-step instructions a parent helper could follow without prior knowledge.`,
         },
