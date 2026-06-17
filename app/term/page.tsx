@@ -272,7 +272,7 @@ export default function TermPage() {
 
   return (
     <>
-      <style>{`
+      <style key={acc}>{`
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         body{font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f5f7;color:#111827;}
         .nav{background:#2C3E6B;height:52px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;}

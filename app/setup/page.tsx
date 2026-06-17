@@ -20,18 +20,18 @@ export default function SetupPage() {
   const [members, setMembers] = useState(['']);
 
   useEffect(()=>{
-    const saved = localStorage.getItem('scoutGroupConfig');
+    const saved = localStorage.getItem('groupConfig');
     if(saved){ const c=JSON.parse(saved); setGroupName(c.groupName||''); setSection(c.section||'Joeys'); setMeetingDay(c.meetingDay||'Wednesday'); setMeetingTime(c.meetingTime||'18:00'); setLeaders(c.leaders?.length?c.leaders:['']); setMembers(c.members?.length?c.members:['']); }
   },[]);
 
   const acc = SECTIONS.find(s=>s.id===section)?.accent||'#C17F24';
   const accText = SECTIONS.find(s=>s.id===section)?.text||'#fff';
 
-  const save=()=>{ localStorage.setItem('scoutGroupConfig',JSON.stringify({groupName,section,meetingDay,meetingTime,leaders:leaders.filter(Boolean),members:members.filter(Boolean)})); router.push('/term'); };
+  const save=()=>{ localStorage.setItem('groupConfig',JSON.stringify({groupName,section,meetingDay,meetingTime,leaders:leaders.filter(Boolean),members:members.filter(Boolean)})); router.push('/term'); };
 
   return (
     <>
-      <style>{`
+      <style key={acc}>{`
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         body{font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f5f7;color:#111827;}
         .nav{background:#2C3E6B;height:52px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;}
@@ -67,6 +67,16 @@ export default function SetupPage() {
         .rm{width:32px;height:32px;flex-shrink:0;border:1px solid #e5e7eb;border-radius:6px;background:#fff;cursor:pointer;color:#9ca3af;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
         .rm:hover{border-color:#ef4444;color:#ef4444;background:#fef2f2;}
         .add-link{font-size:12px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px;font-weight:500;text-decoration:none;}
+
+        .info-btn{width:16px;height:16px;border-radius:50%;border:1.5px solid #d1d5db;background:#f9fafb;color:#9ca3af;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s;position:relative;font-style:italic;font-family:Georgia,serif;vertical-align:middle;line-height:1;}
+        .info-btn:hover,.info-btn.open{border-color:#C17F24;background:rgba(193,127,36,0.08);color:#C17F24;}
+        .tt{position:absolute;top:calc(100% + 7px);right:-4px;width:220px;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;padding:10px 12px;box-shadow:0 4px 14px rgba(0,0,0,0.1);z-index:100;text-align:left;display:none;pointer-events:none;}
+        .tt.show{display:block;}
+        .tt::before{content:'';position:absolute;top:-5px;right:8px;width:8px;height:8px;background:#fff;border-top:0.5px solid #e5e7eb;border-left:0.5px solid #e5e7eb;transform:rotate(45deg);}
+        .tt-title{font-size:12px;font-weight:600;color:#111827;margin-bottom:4px;}
+        .tt-body{font-size:11.5px;color:#6b7280;line-height:1.55;}
+        .tt-tip{font-size:11px;color:#C17F24;margin-top:6px;display:flex;align-items:baseline;gap:4px;}
+        .tt-tip::before{content:'→';flex-shrink:0;}
         .save{width:100%;padding:14px;border-radius:8px;border:none;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s;letter-spacing:-0.01em;}
         .save:hover{opacity:0.9;}
       `}</style>
@@ -87,7 +97,7 @@ export default function SetupPage() {
 
       <div className="body">
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>1</div> Group details</div>
+          <div className="card-head"><div className="cn" style={{background:acc}}>1</div> Group details <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Group details</div><div class="tt-body">Your group name appears on every term plan and run sheet. The section (Joeys, Cubs, Scouts or Venturers) sets the colour theme throughout the app.</div></div></span>`}}/></div>
           <div className="cb">
             <div className="field">
               <div className="lbl">Group name</div>
@@ -109,7 +119,7 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>2</div> Meeting schedule</div>
+          <div className="card-head"><div className="cn" style={{background:acc}}>2</div> Meeting schedule <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Meeting schedule</div><div class="tt-body">Your usual meeting day and time. The term planner uses this to auto-generate all your session dates when you enter term start and end dates.</div><div class="tt-tip">You can override the time for individual sessions in the term plan</div></div></span>`}}/></div>
           <div className="cb">
             <div className="two">
               <div className="field">
@@ -127,7 +137,7 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>3</div> Leaders</div>
+          <div className="card-head"><div className="cn" style={{background:acc}}>3</div> Leaders <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Leaders</div><div class="tt-body">Add all leaders who run sessions for this section. The first leader is set as default on each term plan row — you can change who leads each night individually.</div><div class="tt-tip">Co-leaders like Steve can be added here and assigned per session</div></div></span>`}}/></div>
           <div className="cb">
             {leaders.map((l,i)=>(
               <div key={i} className="lrow">
@@ -140,7 +150,7 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>4</div> Members<span className="card-opt">optional — for patrol leader tracking</span></div>
+          <div className="card-head"><div className="cn" style={{background:acc}}>4</div> Members <span className="card-opt">optional</span> <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Optionally add your Joey/Scout names here. This lets you assign Patrol Leaders and Assistant Patrol Leaders to specific sessions in the term plan, helping track who is working toward milestone badges.</div><div class="tt-tip">This is optional — you can add members later or skip entirely</div></div></span>`}}/></div>
           <div className="cb">
             {members.map((m,i)=>(
               <div key={i} className="lrow">
@@ -156,6 +166,21 @@ export default function SetupPage() {
           Save and start planning →
         </button>
       </div>
+      
+      <script dangerouslySetInnerHTML={{__html:`
+        (function(){
+          function closeAll(){ document.querySelectorAll('.tt').forEach(t=>t.classList.remove('show')); document.querySelectorAll('.info-btn').forEach(b=>b.classList.remove('open')); }
+          document.addEventListener('click',function(e){
+            const btn = e.target.closest('.info-btn');
+            if(!btn){ closeAll(); return; }
+            const tt = btn.querySelector('.tt');
+            const wasOpen = tt && tt.classList.contains('show');
+            closeAll();
+            if(tt && !wasOpen){ tt.classList.add('show'); btn.classList.add('open'); }
+          });
+        })();
+      `}}/>
+
     </>
   );
 }
