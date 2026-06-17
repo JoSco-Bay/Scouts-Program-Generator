@@ -238,6 +238,7 @@ export default function TermPage() {
           topic: ev.name,
           location: ev.location || '',
           oasFocus: '',
+          sessionNotes: '',
           bring: '',
           leader: config.leaders[0]||'',
           assistantPatrol: '',
