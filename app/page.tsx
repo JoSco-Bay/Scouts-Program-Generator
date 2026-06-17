@@ -50,7 +50,7 @@ export default function HomePage() {
       </nav>
 
       <div className="hero">
-        <div className="hero-badge">⚜ Scouts Australia · Term Planner & Run Sheet Generator</div>
+        <div className="hero-badge">⚜ Youth Program Builder · Term Planner & Run Sheet Generator</div>
         <h1 className="hero-title">Plan every<br/><em>Scout meeting.</em></h1>
         <p className="hero-desc">Build a full term schedule and generate detailed, ready-to-run meeting programs — with timed activity sheets, OAS badge goals, equipment lists, and leader notes.</p>
         <div className="hero-btns">
