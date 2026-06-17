@@ -18,7 +18,7 @@ const COLUMN_DEFS = [
   { key:'date', label:'Date', width:'88px', always:true },
   { key:'topic', label:'Topic / theme', width:'190px', always:true },
   { key:'location', label:'Location', width:'80px' },
-  { key:'focusNotes', label:'Focus & notes', width:'130px' },
+  { key:'focusNotes', label:'Focus / notes', width:'130px' },
   { key:'bring', label:'Bring', width:'100px' },
   { key:'leader', label:'Leader', width:'68px' },
   { key:'assistantPatrol', label:'Asst. patrol', width:'74px' },
