@@ -75,6 +75,7 @@ export default function TermPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadPlan = () => {
+    const membersData = localStorage.getItem('members');
     const payload = {
       type: 'program-builder-term-plan',
       version: 1,
@@ -84,6 +85,7 @@ export default function TermPage() {
       endDate,
       config,
       rows,
+      members: membersData ? JSON.parse(membersData) : [],
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -120,6 +122,9 @@ export default function TermPage() {
           setRows(data.rows);
           setDatesSet(true);
           localStorage.setItem('programRows', JSON.stringify(data.rows));
+        }
+        if (data.members) {
+          localStorage.setItem('members', JSON.stringify(data.members));
         }
       } catch (err) {
         alert('Could not read this file — it may be corrupted or not a valid term plan file.');
@@ -440,7 +445,7 @@ export default function TermPage() {
         <div className="tabs">
           <div className="tab on" style={{borderBottomColor:acc}}>Term plan</div>
           <div className="tab">Run sheets</div>
-          <div className="tab">Members</div>
+          <div className="tab" onClick={()=>router.push('/members')}>Members</div>
         </div>
       </div>
 
