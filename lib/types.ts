@@ -16,6 +16,7 @@ export interface TermRow {
   topic: string;
   location: string;
   oasFocus: string;
+  sessionNotes: string;  // FIX: was missing from shared type
   bring: string;
   leader: string;
   assistantPatrol: string;

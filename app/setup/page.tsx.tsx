@@ -1,40 +1,96 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { SECTION_COLOURS, NAVY } from "@/lib/colours";
+import type { GroupConfig } from "@/lib/types";
 
-const SECTIONS = [
-  { id:'Joeys',     age:'5–8 yrs',   accent:'#C17F24', text:'#fff'    },
-  { id:'Cubs',      age:'8–11 yrs',  accent:'#E8B800', text:'#3d2800' },
-  { id:'Scouts',    age:'11–15 yrs', accent:'#6BBF5A', text:'#fff'    },
-  { id:'Venturers', age:'15–18 yrs', accent:'#B5485E', text:'#fff'    },
-];
+const SECTIONS = Object.entries(SECTION_COLOURS).map(([id, v]) => ({ id, ...v }));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+function genId() { return Math.random().toString(36).slice(2, 9); }
 
 export default function SetupPage() {
   const router = useRouter();
   const [groupName, setGroupName] = useState('');
-  const [section, setSection] = useState('Joeys');
+  const [section, setSection] = useState<keyof typeof SECTION_COLOURS>('Joeys');
   const [meetingDay, setMeetingDay] = useState('Wednesday');
   const [meetingTime, setMeetingTime] = useState('18:00');
   const [leaders, setLeaders] = useState(['']);
   const [members, setMembers] = useState(['']);
 
-  useEffect(()=>{
+  useEffect(() => {
     const saved = localStorage.getItem('groupConfig');
-    if(saved){ const c=JSON.parse(saved); setGroupName(c.groupName||''); setSection(c.section||'Joeys'); setMeetingDay(c.meetingDay||'Wednesday'); setMeetingTime(c.meetingTime||'18:00'); setLeaders(c.leaders?.length?c.leaders:['']); setMembers(c.members?.length?c.members:['']); }
-  },[]);
+    if (saved) {
+      const c: GroupConfig = JSON.parse(saved);
+      setGroupName(c.groupName || '');
+      setSection(c.section || 'Joeys');
+      setMeetingDay(c.meetingDay || 'Wednesday');
+      setMeetingTime(c.meetingTime || '18:00');
+      setLeaders(c.leaders?.length ? c.leaders : ['']);
+      setMembers(c.members?.length ? c.members : ['']);
+    }
+  }, []);
 
-  const acc = SECTIONS.find(s=>s.id===section)?.accent||'#C17F24';
-  const accText = SECTIONS.find(s=>s.id===section)?.text||'#fff';
+  const acc = SECTION_COLOURS[section]?.accent || '#C17F24';
+  const accText = SECTION_COLOURS[section]?.text || '#fff';
 
-  const save=()=>{ localStorage.setItem('groupConfig',JSON.stringify({groupName,section,meetingDay,meetingTime,leaders:leaders.filter(Boolean),members:members.filter(Boolean)})); router.push('/term'); };
+  const save = () => {
+    const filteredMembers = members.filter(Boolean);
+    const config: GroupConfig = {
+      groupName,
+      section,
+      meetingDay,
+      meetingTime,
+      leaders: leaders.filter(Boolean),
+      members: filteredMembers,
+    };
+    localStorage.setItem('groupConfig', JSON.stringify(config));
+
+    // FIX: seed setup members into the members store so Members page shows them
+    // Only add names that don't already exist as full Member records
+    const existingRaw = localStorage.getItem('members');
+    const existing: Array<{ id: string; firstName: string; lastName: string }> =
+      existingRaw ? JSON.parse(existingRaw) : [];
+    const existingNames = new Set(
+      existing.map(m => `${m.firstName} ${m.lastName}`.trim().toLowerCase())
+    );
+
+    const toAdd = filteredMembers.filter(name => {
+      const [first = '', ...rest] = name.trim().split(' ');
+      const last = rest.join(' ');
+      return !existingNames.has(`${first} ${last}`.toLowerCase());
+    });
+
+    if (toAdd.length > 0) {
+      const newMembers = toAdd.map(name => {
+        const [firstName = name, ...rest] = name.trim().split(' ');
+        const lastName = rest.join(' ');
+        return {
+          id: genId(),
+          firstName,
+          lastName,
+          age: 0,
+          yearJoined: new Date().getFullYear(),
+          attendance: {},
+          oas: {},
+          sia: [],
+          milestoneActivities: [],
+          milestonesAwarded: [],
+          peakAwarded: false,
+        };
+      });
+      localStorage.setItem('members', JSON.stringify([...existing, ...newMembers]));
+    }
+
+    router.push('/term');
+  };
 
   return (
     <>
       <style key={acc}>{`
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         body{font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f5f7;color:#111827;}
-        .nav{background:#2C3E6B;height:52px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;}
+        .nav{background:${NAVY};height:52px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;}
         .back{color:rgba(255,255,255,0.65);font-size:13px;text-decoration:none;display:flex;align-items:center;gap:5px;}
         .back:hover{color:#fff;}
         .nav-r{display:flex;align-items:center;gap:8px;}
@@ -66,8 +122,7 @@ export default function SetupPage() {
         .lrow input{flex:1;margin:0;}
         .rm{width:32px;height:32px;flex-shrink:0;border:1px solid #e5e7eb;border-radius:6px;background:#fff;cursor:pointer;color:#9ca3af;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
         .rm:hover{border-color:#ef4444;color:#ef4444;background:#fef2f2;}
-        .add-link{font-size:12px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px;font-weight:500;text-decoration:none;}
-
+        .add-link{font-size:12px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px;font-weight:500;}
         .info-btn{width:16px;height:16px;border-radius:50%;border:1.5px solid #d1d5db;background:#f9fafb;color:#9ca3af;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s;position:relative;font-style:italic;font-family:Georgia,serif;vertical-align:middle;line-height:1;}
         .info-btn:hover,.info-btn.open{border-color:#C17F24;background:rgba(193,127,36,0.08);color:#C17F24;}
         .tt{position:absolute;top:calc(100% + 7px);right:-4px;width:220px;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;padding:10px 12px;box-shadow:0 4px 14px rgba(0,0,0,0.1);z-index:100;text-align:left;display:none;pointer-events:none;}
@@ -97,7 +152,11 @@ export default function SetupPage() {
 
       <div className="body">
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>1</div> Group details <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Group details</div><div class="tt-body">Your group name appears on every term plan and run sheet. The section (Joeys, Cubs, Scouts or Venturers) sets the colour theme throughout the app.</div></div></span>`}}/></div>
+          <div className="card-head">
+            <div className="cn" style={{background:acc}}>1</div>
+            Group details
+            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Group details</div><div class="tt-body">Your group name appears on every term plan and run sheet. The section sets the colour theme throughout the app.</div></div></span>`}}/>
+          </div>
           <div className="cb">
             <div className="field">
               <div className="lbl">Group name</div>
@@ -109,7 +168,7 @@ export default function SetupPage() {
                 {SECTIONS.map(s=>(
                   <button key={s.id} className={`sb${section===s.id?' on':''}`}
                     style={section===s.id?{borderColor:s.accent,color:'#111827'}:{}}
-                    onClick={()=>setSection(s.id)}>
+                    onClick={()=>setSection(s.id as keyof typeof SECTION_COLOURS)}>
                     {s.id}<div className="sb-age">{s.age}</div>
                   </button>
                 ))}
@@ -119,7 +178,11 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>2</div> Meeting schedule <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Meeting schedule</div><div class="tt-body">Your usual meeting day and time. The term planner uses this to auto-generate all your session dates when you enter term start and end dates.</div><div class="tt-tip">You can override the time for individual sessions in the term plan</div></div></span>`}}/></div>
+          <div className="card-head">
+            <div className="cn" style={{background:acc}}>2</div>
+            Meeting schedule
+            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Meeting schedule</div><div class="tt-body">Your usual meeting day and time. The term planner uses this to auto-generate all your session dates when you enter term start and end dates.</div><div class="tt-tip">You can override the time for individual sessions in the term plan</div></div></span>`}}/>
+          </div>
           <div className="cb">
             <div className="two">
               <div className="field">
@@ -137,7 +200,11 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>3</div> Leaders <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Leaders</div><div class="tt-body">Add all leaders who run sessions for this section. The first leader is set as default on each term plan row — you can change who leads each night individually.</div><div class="tt-tip">Co-leaders like Steve can be added here and assigned per session</div></div></span>`}}/></div>
+          <div className="card-head">
+            <div className="cn" style={{background:acc}}>3</div>
+            Leaders
+            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Leaders</div><div class="tt-body">Add all leaders who run sessions. The first leader is set as default on each term plan row — you can change who leads each night individually.</div><div class="tt-tip">Co-leaders can be assigned per session in the term plan</div></div></span>`}}/>
+          </div>
           <div className="cb">
             {leaders.map((l,i)=>(
               <div key={i} className="lrow">
@@ -150,7 +217,11 @@ export default function SetupPage() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div className="cn" style={{background:acc}}>4</div> Members <span className="card-opt">optional</span> <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Optionally add your Joey/Scout names here. This lets you assign Patrol Leaders and Assistant Patrol Leaders to specific sessions in the term plan, helping track who is working toward milestone badges.</div><div class="tt-tip">This is optional — you can add members later or skip entirely</div></div></span>`}}/></div>
+          <div className="card-head">
+            <div className="cn" style={{background:acc}}>4</div>
+            Members <span className="card-opt">optional</span>
+            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Add your member names here. They'll appear in the Members tab where you can track attendance, OAS progress, SIA projects, and milestones.</div><div class="tt-tip">You can add or edit members any time in the Members tab</div></div></span>`}}/>
+          </div>
           <div className="cb">
             {members.map((m,i)=>(
               <div key={i} className="lrow">
@@ -166,7 +237,7 @@ export default function SetupPage() {
           Save and start planning →
         </button>
       </div>
-      
+
       <script dangerouslySetInnerHTML={{__html:`
         (function(){
           function closeAll(){ document.querySelectorAll('.tt').forEach(t=>t.classList.remove('show')); document.querySelectorAll('.info-btn').forEach(b=>b.classList.remove('open')); }
@@ -180,7 +251,6 @@ export default function SetupPage() {
           });
         })();
       `}}/>
-
     </>
   );
 }
