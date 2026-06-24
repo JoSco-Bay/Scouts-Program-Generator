@@ -309,6 +309,10 @@ export default function TermPage() {
         .efi{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 8px;font-size:12px;color:#111827;font-family:inherit;outline:none;}
         .efi:focus{border-color:${acc};}
         .ef-check{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;}
+        .ap-checklist{max-height:120px;overflow-y:auto;border:1px solid #d1d5db;border-radius:5px;padding:4px 6px;background:#fff;}
+        .ap-checklist:focus-within{border-color:${acc};}
+        .ap-check-row{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;padding:2px 0;user-select:none;}
+        .ap-check-row:hover{color:#111827;}
         .ef-actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;}
         .save-btn{font-size:12px;padding:6px 16px;border-radius:6px;border:none;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;}
         .cancel-btn{font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;}
@@ -564,10 +568,22 @@ export default function TermPage() {
                                   </select>
                                 </div>
                                 <div><div className="efl">Asst. patrol leader</div>
-                                  <select className="efi" value={editDraft.assistantPatrol||''} onChange={e=>setEditDraft(d=>({...d,assistantPatrol:e.target.value}))}>
-                                    <option value="">— select —</option>
-                                    {[...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].map(n=><option key={n} value={n}>{n}</option>)}
-                                  </select>
+                                  <div className="ap-checklist">
+                                    {(()=>{
+                                      const allNames = [...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))];
+                                      const checked = new Set((editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean));
+                                      if (allNames.length===0) return <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>;
+                                      return allNames.map(n=>(
+                                        <label key={n} className="ap-check-row">
+                                          <input type="checkbox" checked={checked.has(n)} style={{accentColor:acc}} onChange={()=>{
+                                            const next = checked.has(n) ? [...checked].filter(x=>x!==n) : [...checked,n];
+                                            setEditDraft(d=>({...d,assistantPatrol:next.join(', ')}));
+                                          }}/>
+                                          {n}
+                                        </label>
+                                      ));
+                                    })()}
+                                  </div>
                                 </div>
                               </div>
                               <div className="ef-actions">
