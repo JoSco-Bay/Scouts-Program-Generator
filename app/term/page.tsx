@@ -564,7 +564,7 @@ export default function TermPage() {
                                 {(()=>{
                                   const cfgLeaders = config?.leaders||[];
                                   const cfgMembers = (config?.members||[]).filter(Boolean);
-                                  const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames])].filter(Boolean);
+                                  const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames].map(n=>n.trim()))].filter(Boolean);
                                   const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
                                   return (<>
                                     <div><div className="efl">Leader</div>
