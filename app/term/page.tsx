@@ -561,33 +561,44 @@ export default function TermPage() {
                                   placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple."/>
                               </div>
                               <div className="ef2">
-                                <div><div className="efl">Leader</div>
-                                  <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}>
-                                    <option value="">— select —</option>
-                                    {[...(config?.leaders||[]),...memberNames.filter(n=>!(config?.leaders||[]).includes(n))].map(n=><option key={n} value={n}>{n}</option>)}
-                                  </select>
-                                </div>
-                                <div><div className="efl">Asst. patrol leader</div>
-                                  <div className="ap-checklist">
-                                    {[...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].length===0
-                                      ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
-                                      : [...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].map(name=>(
-                                          <label key={name} className="ap-check-row">
-                                            <input type="checkbox"
-                                              checked={(editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean).includes(name)}
-                                              style={{accentColor:acc}}
-                                              onChange={()=>setEditDraft(d=>{
-                                                const cur = (d.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
-                                                const next = cur.includes(name) ? cur.filter(x=>x!==name) : [...cur,name];
-                                                return {...d,assistantPatrol:next.join(', ')};
-                                              })}
-                                            />
-                                            {name}
-                                          </label>
-                                        ))
-                                    }
-                                  </div>
-                                </div>
+                                {(()=>{
+                                  const cfgLeaders = config?.leaders||[];
+                                  const cfgMembers = (config?.members||[]).filter(Boolean);
+                                  const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames])].filter(Boolean);
+                                  const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
+                                  return (<>
+                                    <div><div className="efl">Leader</div>
+                                      <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}>
+                                        <option value="">— select —</option>
+                                        {allPeople.map(n=><option key={n} value={n}>{n}</option>)}
+                                      </select>
+                                    </div>
+                                    <div><div className="efl">Asst. patrol leader</div>
+                                      <div className="ap-checklist">
+                                        {allPeople.length===0
+                                          ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
+                                          : allPeople.map(name=>(
+                                              <label key={name} className="ap-check-row">
+                                                <input type="checkbox"
+                                                  checked={selected.includes(name)}
+                                                  style={{accentColor:acc}}
+                                                  onChange={e=>{
+                                                    const ticked = e.target.checked;
+                                                    setEditDraft(d=>{
+                                                      const parts = (d.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
+                                                      const next = ticked ? [...new Set([...parts,name])] : parts.filter(p=>p!==name);
+                                                      return {...d,assistantPatrol:next.join(', ')};
+                                                    });
+                                                  }}
+                                                />
+                                                {name}
+                                              </label>
+                                            ))
+                                        }
+                                      </div>
+                                    </div>
+                                  </>);
+                                })()}
                               </div>
                               <div className="ef-actions">
                                 <button className="save-btn" style={{background:acc}} onClick={saveEdit}>Save</button>
