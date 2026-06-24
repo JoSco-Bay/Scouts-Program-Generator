@@ -27,9 +27,9 @@ const SIA_CATEGORIES = [
 ];
 
 const MILESTONES = [
-  { id:'m1', label:'Milestone 1', participate:6, assist:2, lead:1 },
-  { id:'m2', label:'Milestone 2', participate:5, assist:3, lead:2 },
-  { id:'m3', label:'Milestone 3', participate:4, assist:4, lead:4 },
+  { id:'m1', label:'Milestone 1', participateTarget:6, assist:1, lead:1 },
+  { id:'m2', label:'Milestone 2', participateTarget:5, assist:1, lead:1 },
+  { id:'m3', label:'Milestone 3', participateTarget:4, assist:1, lead:1 },
 ];
 
 const CHALLENGE_AREAS = ['Community','Outdoor','Creative','Personal'];
@@ -46,8 +46,7 @@ interface MilestoneActivity {
   sessionId: string;
   sessionDate: string;
   challengeArea: string;
-  type: 'participate'|'assist'|'lead';
-  // which milestone this activity counts toward (set at time of logging)
+  type: 'assist'|'lead'; // Participate is auto-counted from attendance, not logged here
   milestone: string;
 }
 
@@ -74,28 +73,25 @@ function calcAttendancePct(member: Member, rows: TermRow[]): number {
   return Math.round((sessions.filter(r=>member.attendance[r.id]).length / sessions.length) * 100);
 }
 
-// FIX: milestone progress now correctly filters to only activities logged for that milestone
-function calcMilestoneProgress(member: Member, milestoneId: string) {
+// Participate = attendance (auto from grid). Assist and Lead are manually logged.
+function calcMilestoneProgress(member: Member, milestoneId: string, sessions: TermRow[]) {
   const m = MILESTONES.find(x=>x.id===milestoneId)!;
   const acts = member.milestoneActivities.filter(a=>a.milestone===milestoneId);
 
-  const byType = (type: 'participate'|'assist'|'lead') => acts.filter(a=>a.type===type).length;
-  const byArea = (area: string, type: 'participate'|'assist'|'lead') =>
-    acts.filter(a=>a.challengeArea===area&&a.type===type).length;
+  // Participate = sessions attended (from attendance grid)
+  const attended = sessions.filter(s=>member.attendance[s.id]).length;
 
-  // Participate: must have at least m.participate in EACH challenge area
-  const participateMin = Math.min(...CHALLENGE_AREAS.map(a=>byArea(a,'participate')));
-  const assistTotal   = byType('assist');
-  const leadTotal     = byType('lead');
+  const assistTotal = acts.filter(a=>a.type==='assist').length;
+  const leadTotal   = acts.filter(a=>a.type==='lead').length;
 
   return {
-    participate:       Math.min(participateMin, m.participate),
-    participateTarget: m.participate,
-    assist:            Math.min(assistTotal,    m.assist),
+    participate:       Math.min(attended, m.participateTarget),
+    participateTarget: m.participateTarget,
+    assist:            Math.min(assistTotal, m.assist),
     assistTarget:      m.assist,
-    lead:              Math.min(leadTotal,       m.lead),
+    lead:              Math.min(leadTotal, m.lead),
     leadTarget:        m.lead,
-    complete: participateMin >= m.participate && assistTotal >= m.assist && leadTotal >= m.lead,
+    complete: attended >= m.participateTarget && assistTotal >= m.assist && leadTotal >= m.lead,
   };
 }
 
@@ -115,7 +111,7 @@ export default function MembersPage() {
   const [addDraft, setAddDraft] = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
   const [addSIA, setAddSIA] = useState({category:'adventure',projectName:'',status:'planning',notes:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
-  const [addMilAct, setAddMilAct] = useState({sessionId:'',challengeArea:'Community',type:'participate',milestone:'m1'});
+  const [addMilAct, setAddMilAct] = useState({sessionId:'',challengeArea:'Community',type:'assist',milestone:'m1'});
   const [showMilForm, setShowMilForm] = useState(false);
 
   useEffect(()=>{
@@ -725,7 +721,6 @@ export default function MembersPage() {
                     <div>
                       <div className="af-label">Type</div>
                       <select className="af-input" value={addMilAct.type} onChange={e=>setAddMilAct(d=>({...d,type:e.target.value}))}>
-                        <option value="participate">Participate</option>
                         <option value="assist">Assist</option>
                         <option value="lead">Lead</option>
                       </select>
@@ -739,7 +734,7 @@ export default function MembersPage() {
               )}
               <div className="milestone-list">
                 {MILESTONES.map(mil=>{
-                  const prog    = calcMilestoneProgress(selected, mil.id);
+                  const prog    = calcMilestoneProgress(selected, mil.id, sessions);
                   const awarded = selected.milestonesAwarded.includes(mil.id);
                   const acts    = selected.milestoneActivities.filter(a=>a.milestone===mil.id);
                   return (
@@ -753,9 +748,9 @@ export default function MembersPage() {
                       </div>
                       <div className="mil-bars">
                         {[
-                          {label:`Participate (${mil.participate}× each area)`, val:prog.participate, max:mil.participate, colour:'#6BBF5A'},
-                          {label:`Assist (${mil.assist}× any area)`,            val:prog.assist,      max:mil.assist,      colour:NAVY},
-                          {label:`Lead (${mil.lead}× any area)`,                val:prog.lead,        max:mil.lead,        colour:acc},
+                          {label:`Participate — attend ${mil.participateTarget}+ sessions`, val:prog.participate, max:mil.participateTarget, colour:'#6BBF5A'},
+                          {label:`Assist — at least once`,  val:prog.assist, max:mil.assist, colour:NAVY},
+                          {label:`Lead — at least once`,    val:prog.lead,   max:mil.lead,   colour:acc},
                         ].map(b=>(
                           <div key={b.label}>
                             <div className="mil-bar-label">{b.label}</div>
