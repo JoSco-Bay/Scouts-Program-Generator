@@ -7,8 +7,6 @@ import type { GroupConfig } from "@/lib/types";
 const SECTIONS = Object.entries(SECTION_COLOURS).map(([id, v]) => ({ id, ...v }));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-function genId() { return Math.random().toString(36).slice(2, 9); }
-
 export default function SetupPage() {
   const router = useRouter();
   const [groupName, setGroupName] = useState('');
@@ -45,43 +43,6 @@ export default function SetupPage() {
       members: filteredMembers,
     };
     localStorage.setItem('groupConfig', JSON.stringify(config));
-
-    // FIX: seed setup members into the members store so Members page shows them
-    // Only add names that don't already exist as full Member records
-    const existingRaw = localStorage.getItem('members');
-    const existing: Array<{ id: string; firstName: string; lastName: string }> =
-      existingRaw ? JSON.parse(existingRaw) : [];
-    const existingNames = new Set(
-      existing.map(m => `${m.firstName} ${m.lastName}`.trim().toLowerCase())
-    );
-
-    const toAdd = filteredMembers.filter(name => {
-      const [first = '', ...rest] = name.trim().split(' ');
-      const last = rest.join(' ');
-      return !existingNames.has(`${first} ${last}`.toLowerCase());
-    });
-
-    if (toAdd.length > 0) {
-      const newMembers = toAdd.map(name => {
-        const [firstName = name, ...rest] = name.trim().split(' ');
-        const lastName = rest.join(' ');
-        return {
-          id: genId(),
-          firstName,
-          lastName,
-          age: 0,
-          yearJoined: new Date().getFullYear(),
-          attendance: {},
-          oas: {},
-          sia: [],
-          milestoneActivities: [],
-          milestonesAwarded: [],
-          peakAwarded: false,
-        };
-      });
-      localStorage.setItem('members', JSON.stringify([...existing, ...newMembers]));
-    }
-
     router.push('/term');
   };
 
@@ -220,7 +181,7 @@ export default function SetupPage() {
           <div className="card-head">
             <div className="cn" style={{background:acc}}>4</div>
             Members <span className="card-opt">optional</span>
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Add your member names here. They'll appear in the Members tab where you can track attendance, OAS progress, SIA projects, and milestones.</div><div class="tt-tip">You can add or edit members any time in the Members tab</div></div></span>`}}/>
+            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Add your member names here — they'll appear in the leader and patrol dropdowns in the term plan. To track attendance, OAS progress, and milestones, add members properly in the Members tab.</div><div class="tt-tip">Members tab is where full tracking happens</div></div></span>`}}/>
           </div>
           <div className="cb">
             {members.map((m,i)=>(
