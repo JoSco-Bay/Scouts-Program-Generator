@@ -12,10 +12,11 @@ export async function POST(req: Request) {
     if (!row || !config) {
       return Response.json({ error: "Missing session or group info" }, { status: 400 });
     }
+    const sessionNotes = row.sessionNotes ? '\nLeader notes: ' + row.sessionNotes : '';
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
-      max_tokens: 2500,
+      max_tokens: 4000,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -32,7 +33,7 @@ Topic: ${row.topic || 'General meeting'}
 Date: ${row.date || 'TBC'}
 Time: ${row.time || '6:00pm'}
 Location: ${row.location || 'Hall'}
-OAS Focus: ${row.oasFocus || 'General'}
+OAS Focus: ${row.oasFocus || 'General'}${sessionNotes}
 Leader: ${row.leader || 'Leader'}
 Assistant Patrol Leader: ${row.assistantPatrol || 'None'}
 
@@ -77,11 +78,17 @@ Give each activity a unique "id" string like "a1","a2" etc.`,
       return Response.json({ error: "AI returned invalid JSON. Please try again." }, { status: 500 });
     }
 
-    if (!data.activities || !Array.isArray(data.activities)) {
-      return Response.json({ error: "AI response did not include activities." }, { status: 500 });
-    }
-
-    return Response.json(data);
+    return Response.json({
+      tagline:        data.tagline        || '',
+      challengeAreas: data.challengeAreas || [],
+      plan:           data.plan           || [],
+      activities:     data.activities     || [],
+      review:         data.review         || [],
+      participate:    data.participate    || [],
+      assist:         data.assist         || [],
+      lead:           data.lead           || [],
+      itemsRequired:  data.itemsRequired  || [],
+    });
   } catch (err: any) {
     console.error("generate-runsheet error:", err);
     return Response.json({ error: err.message || "Failed to generate run sheet" }, { status: 500 });
