@@ -55,6 +55,7 @@ export default function TermPage() {
   const [rows, setRows] = useState<TermRow[]>([]);
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editDraft, setEditDraft] = useState<Partial<TermRow>>({});
+  const [memberNames, setMemberNames] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [datesSet, setDatesSet] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Record<string,boolean>>(
@@ -71,6 +72,7 @@ export default function TermPage() {
   useEffect(()=>{
     const c = localStorage.getItem('groupConfig'); if (c) setConfig(JSON.parse(c));
     const t = localStorage.getItem('programRows'); if (t) { setRows(JSON.parse(t)); setDatesSet(true); }
+    const m = localStorage.getItem('members'); if(m) setMemberNames(JSON.parse(m).map((mem: any) => mem.firstName + ' ' + mem.lastName));
   },[]);
 
   const sc = config ? SECTION_COLOURS[config.section] || SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
@@ -555,8 +557,18 @@ export default function TermPage() {
                                   placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple."/>
                               </div>
                               <div className="ef2">
-                                <div><div className="efl">Leader</div><input className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}/></div>
-                                <div><div className="efl">Asst. patrol leader</div><input className="efi" value={editDraft.assistantPatrol||''} onChange={e=>setEditDraft(d=>({...d,assistantPatrol:e.target.value}))}/></div>
+                                <div><div className="efl">Leader</div>
+                                  <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}>
+                                    <option value="">— select —</option>
+                                    {[...(config?.leaders||[]),...memberNames.filter(n=>!(config?.leaders||[]).includes(n))].map(n=><option key={n} value={n}>{n}</option>)}
+                                  </select>
+                                </div>
+                                <div><div className="efl">Asst. patrol leader</div>
+                                  <select className="efi" value={editDraft.assistantPatrol||''} onChange={e=>setEditDraft(d=>({...d,assistantPatrol:e.target.value}))}>
+                                    <option value="">— select —</option>
+                                    {[...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].map(n=><option key={n} value={n}>{n}</option>)}
+                                  </select>
+                                </div>
                               </div>
                               <div className="ef-actions">
                                 <button className="save-btn" style={{background:acc}} onClick={saveEdit}>Save</button>
