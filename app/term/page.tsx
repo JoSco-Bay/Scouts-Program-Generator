@@ -569,20 +569,23 @@ export default function TermPage() {
                                 </div>
                                 <div><div className="efl">Asst. patrol leader</div>
                                   <div className="ap-checklist">
-                                    {(()=>{
-                                      const allNames = [...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))];
-                                      const checked = new Set((editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean));
-                                      if (allNames.length===0) return <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>;
-                                      return allNames.map(n=>(
-                                        <label key={n} className="ap-check-row">
-                                          <input type="checkbox" checked={checked.has(n)} style={{accentColor:acc}} onChange={()=>{
-                                            const next = checked.has(n) ? [...checked].filter(x=>x!==n) : [...checked,n];
-                                            setEditDraft(d=>({...d,assistantPatrol:next.join(', ')}));
-                                          }}/>
-                                          {n}
-                                        </label>
-                                      ));
-                                    })()}
+                                    {[...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].length===0
+                                      ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
+                                      : [...memberNames,...(config?.leaders||[]).filter(n=>!memberNames.includes(n))].map(name=>(
+                                          <label key={name} className="ap-check-row">
+                                            <input type="checkbox"
+                                              checked={(editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean).includes(name)}
+                                              style={{accentColor:acc}}
+                                              onChange={()=>setEditDraft(d=>{
+                                                const cur = (d.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
+                                                const next = cur.includes(name) ? cur.filter(x=>x!==name) : [...cur,name];
+                                                return {...d,assistantPatrol:next.join(', ')};
+                                              })}
+                                            />
+                                            {name}
+                                          </label>
+                                        ))
+                                    }
                                   </div>
                                 </div>
                               </div>
