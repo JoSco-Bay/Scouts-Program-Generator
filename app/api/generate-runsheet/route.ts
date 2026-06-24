@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: "You are an expert Scouts Australia program planner. Generate complete, practical run sheets for volunteer leaders. Return only valid JSON, no markdown fences.",
+          content: "You are an expert Scouts Australia program planner. Generate complete, practical run sheets for volunteer leaders following the PLAN/DO/REVIEW method and Scouts Australia's Participate/Assist/Lead framework. Return only valid JSON, no markdown fences.",
         },
         {
           role: "user",
@@ -37,35 +37,75 @@ OAS Focus: ${row.oasFocus || 'General'}${sessionNotes}
 Leader: ${row.leader || 'Leader'}
 Assistant Patrol Leader: ${row.assistantPatrol || 'None'}
 
-Return JSON with this structure:
+Return JSON matching this exact structure:
+
 {
+  "tagline": "One inspiring sentence describing the session theme",
+
+  "challengeAreas": ["Community", "Outdoor"],
+
+  "plan": [
+    "Preparation checklist item — what the leader must prepare or bring beforehand",
+    "Another preparation item"
+  ],
+
   "activities": [
     {
-      "id": "unique string",
+      "id": "a1",
       "time": "5:50pm",
-      "name": "Coming-in activity",
-      "detail": "Full description with all sub-steps, safety reminders, and leader notes. Be specific and practical.",
-      "optional": true,
-      "oasTag": null,
+      "name": "Activity name",
+      "detail": "Full step-by-step instructions. Include what leaders do, what Scouts do, safety reminders, and any setup needed. Be specific and practical.",
+      "optional": false,
+      "oasTag": "Camping S1 — cook a camp meal",
       "hasRecipe": false
     }
+  ],
+
+  "review": [
+    "Reflection question to ask Scouts at closing parade",
+    "Another discussion prompt"
+  ],
+
+  "participate": [
+    "What a Scout does to meet the Participate requirement for this session",
+    "Another participate descriptor"
+  ],
+
+  "assist": [
+    "What a Scout does to meet the Assist requirement — helping another Scout with an activity",
+    "Another assist descriptor"
+  ],
+
+  "lead": [
+    "What a Scout does to meet the Lead requirement — leading a group or activity",
+    "Another lead descriptor"
+  ],
+
+  "itemsRequired": [
+    "Specific item or material needed",
+    "Another item"
   ]
 }
 
-Include these activities in order, with realistic timing starting from ${row.time || '6:00pm'}:
-1. Coming-in activity (optional:true, before opening parade)
-2. Opening parade (flag, Scout Promise, introduce theme)
-3. Safety talk (if relevant)
-4. Main activity 1 (full detail)
-5. Main activity 2 (if time allows)
-6. Eat/reflect/clean up (if cooking involved)
-7. Optional game (optional:true)
-8. Closing parade (reflection question, announcements)
-
-For each activity include ALL necessary detail in "detail" — sub-steps, safety reminders, what leaders prepare, what Scouts do step by step.
-Set hasRecipe:true only if the activity involves cooking food.
-Set oasTag to the relevant OAS requirement if applicable (e.g. "Camping S1 — cook a snack"), otherwise null.
-Give each activity a unique "id" string like "a1","a2" etc.`,
+Rules:
+- challengeAreas: only use values from this list: Community, Outdoor, Creative, Personal. Include all that apply.
+- plan: 4–8 actionable preparation items the leader should complete before the session.
+- activities: include in order with realistic timing starting from ${row.time || '6:00pm'}:
+    1. Coming-in activity (optional: true, 10 min before opening)
+    2. Opening parade (flag, Scout Promise, introduce theme)
+    3. Safety talk (if relevant to activities)
+    4. Main activity 1 (full detail, most of session time)
+    5. Main activity 2 (if time allows)
+    6. Eat / reflect / clean up (if cooking involved)
+    7. Optional game (optional: true)
+    8. Closing parade (reflection question, announcements, Scout sign-off)
+  Set hasRecipe: true only if the activity involves cooking food.
+  Set oasTag to the relevant OAS requirement string if applicable, otherwise null.
+- review: 3–5 short reflection questions suitable for the closing parade.
+- participate: 2–4 descriptions of what a Scout does by simply taking part in today's session activities.
+- assist: 2–3 descriptions of how a Scout assists another Scout or leader during the session.
+- lead: 2–3 descriptions of how a Scout leads part of the session — planning, running, or teaching an activity.
+- itemsRequired: complete list of all physical items needed across all activities.`,
         },
       ],
     });
