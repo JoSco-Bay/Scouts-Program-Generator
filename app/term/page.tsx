@@ -382,7 +382,7 @@ export default function TermPage() {
         <div className="ph-sub">{config?.meetingDay}s {config?fmt12(config.meetingTime):''} · {config?.groupName}</div>
         <div className="tabs">
           <div className="tab on" style={{borderBottomColor:acc}}>Term plan</div>
-          <div className="tab" style={{cursor:'pointer'}} onClick={()=>router.push('/runsheet')}>Run sheets</div>
+          <div className="tab" style={{cursor:'pointer'}} onClick={()=>router.push('/runsheets')}>Run sheets</div>
           <div className="tab" style={{cursor:'pointer'}} onClick={()=>router.push('/members')}>Members</div>
         </div>
       </div>
