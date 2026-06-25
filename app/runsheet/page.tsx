@@ -28,6 +28,7 @@ interface RunSheetData {
   lead?: string[];
   itemsRequired?: string[];
 }
+interface SavedRunSheet { data: RunSheetData; row: TermRow; config: GroupConfig; }
 
 function genId(){ return Math.random().toString(36).slice(2,9); }
 
@@ -57,8 +58,26 @@ export default function RunSheetPage() {
       const parsed = JSON.parse(src);
       setSource(parsed);
       setConfig(parsed.config);
+      if(parsed.row?.id){
+        const saved = localStorage.getItem('runsheets');
+        if(saved){
+          const all: Record<string,SavedRunSheet> = JSON.parse(saved);
+          if(all[parsed.row.id]){
+            setData(all[parsed.row.id].data);
+            setGenerated(true);
+          }
+        }
+      }
     }
   },[]);
+
+  useEffect(()=>{
+    if(!data || !source?.row?.id) return;
+    const saved = localStorage.getItem('runsheets');
+    const all: Record<string,SavedRunSheet> = saved ? JSON.parse(saved) : {};
+    all[source.row.id] = { data, row: source.row, config: source.config };
+    localStorage.setItem('runsheets', JSON.stringify(all));
+  },[data, source]);
 
   const sc = config ? SECTION_COLOURS[config.section]||SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
   const acc = sc.accent;
@@ -80,6 +99,12 @@ export default function RunSheetPage() {
       setSource({row: activeRow, config: activeConfig});
       setData(json);
       setGenerated(true);
+      if(activeRow.id){
+        const saved = localStorage.getItem('runsheets');
+        const all: Record<string,SavedRunSheet> = saved ? JSON.parse(saved) : {};
+        all[activeRow.id] = { data: json, row: activeRow, config: activeConfig };
+        localStorage.setItem('runsheets', JSON.stringify(all));
+      }
     } catch(err:any){
       setGenError(err.message || 'Something went wrong generating the run sheet. Please try again.');
     } finally { setGenerating(false); }
@@ -310,6 +335,7 @@ export default function RunSheetPage() {
           <button className="nav-btn" onClick={()=>window.print()}>🖨 Print</button>
           <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
           {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}
+          {generated && source?.row && <button className="nav-btn" onClick={()=>generate()}>↺ Regenerate</button>}
         </div>
       </nav>
 

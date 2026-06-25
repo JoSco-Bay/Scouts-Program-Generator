@@ -210,6 +210,7 @@ export default function TermPage() {
     router.push('/runsheet');
   };
 
+
   const sessionCount = rows.filter(r=>r.rowType==='session').length;
   const activeCols = COLUMN_DEFS.filter(c=>visibleCols[c.key]);
   const colSpanTotal = activeCols.length + 1;
@@ -341,6 +342,12 @@ export default function TermPage() {
         .tt-body{font-size:11.5px;color:#6b7280;line-height:1.55;}
         .tt-tip{font-size:11px;color:#C17F24;margin-top:6px;display:flex;align-items:baseline;gap:4px;}
         .tt-tip::before{content:'→';flex-shrink:0;}
+        .rs-list{display:flex;flex-direction:column;gap:10px;}
+        .rs-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+        .rs-date{font-size:12px;color:#6b7280;margin-bottom:2px;}
+        .rs-topic{font-size:14px;font-weight:600;color:#111827;}
+        .rs-view{font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
+        .rs-view:hover{background:${pale};}
         @media print {
           .nav,.ph,.setup-card,.toolbar,.theme-panel,.add-row,.leg,.act-col,th:last-child,td:last-child{display:none!important;}
           body{background:#fff;}
@@ -375,12 +382,13 @@ export default function TermPage() {
         <div className="ph-sub">{config?.meetingDay}s {config?fmt12(config.meetingTime):''} · {config?.groupName}</div>
         <div className="tabs">
           <div className="tab on" style={{borderBottomColor:acc}}>Term plan</div>
-          <div className="tab">Run sheets</div>
-          <div className="tab" onClick={()=>router.push('/members')}>Members</div>
+          <div className="tab" style={{cursor:'pointer'}} onClick={()=>router.push('/runsheet')}>Run sheets</div>
+          <div className="tab" style={{cursor:'pointer'}} onClick={()=>router.push('/members')}>Members</div>
         </div>
       </div>
 
       <div className="body">
+        <>
         <div className="setup-card">
           <div className="sf">
             <div className="slabel">Term name</div>
@@ -656,6 +664,7 @@ export default function TermPage() {
             </div>
           </>
         )}
+        </>
       </div>
 
       <script dangerouslySetInnerHTML={{__html:`
