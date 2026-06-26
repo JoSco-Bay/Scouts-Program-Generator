@@ -46,7 +46,10 @@ export default function HomePage() {
           <div className="nav-dot">⚜</div>
           <span className="nav-title">Scout Program Builder</span>
         </Link>
-        <Link href="/setup" className="nav-cta">Get started →</Link>
+        <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+          <Link href="/help" className="nav-cta">? Help</Link>
+          <Link href="/setup" className="nav-cta">Get started →</Link>
+        </div>
       </nav>
 
       <div className="hero">

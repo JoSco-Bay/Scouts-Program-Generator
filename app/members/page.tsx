@@ -405,6 +405,7 @@ export default function MembersPage() {
           {config && <span className="nav-tag">{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
+        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
         <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
       </nav>
 

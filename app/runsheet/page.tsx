@@ -332,6 +332,7 @@ export default function RunSheetPage() {
         </div>
         <div className="nav-r">
           <button className="back-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+          <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
           <button className="nav-btn" onClick={()=>window.print()}>🖨 Print</button>
           <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
           {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}

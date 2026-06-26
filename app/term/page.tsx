@@ -373,6 +373,7 @@ export default function TermPage() {
           {config && <span className="nav-tag" style={{background:acc}}>{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
+        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
         <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
       </nav>
 

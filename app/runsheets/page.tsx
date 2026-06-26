@@ -28,7 +28,15 @@ export default function RunSheetsPage() {
     const rs = localStorage.getItem('runsheets');
     if (rs) {
       const all: Record<string,SavedRunSheet> = JSON.parse(rs);
-      setSheets(Object.entries(all).map(([id,entry])=>({id,entry})));
+      Object.entries(all).forEach(([id,entry])=>console.log('row.date:', JSON.stringify(entry.row.date)));
+      setSheets(
+        Object.entries(all)
+          .map(([id,entry])=>({id,entry}))
+          .sort((a,b)=>{
+            const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
+            return Date.parse(parts(a.entry.row.date)) - Date.parse(parts(b.entry.row.date));
+          })
+      );
     }
   },[]);
 
@@ -85,6 +93,7 @@ export default function RunSheetsPage() {
           {config && <span className="nav-tag">{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
+        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
         <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
       </nav>
 

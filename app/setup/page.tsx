@@ -57,6 +57,7 @@ export default function SetupPage() {
         .nav-r{display:flex;align-items:center;gap:8px;}
         .nav-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;}
         .nav-label{color:#fff;font-size:14px;font-weight:500;}
+        .nav-help{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.85);padding:5px 11px;border-radius:6px;font-size:12px;text-decoration:none;}
         .ph{background:#fff;border-bottom:1px solid #e5e7eb;padding:28px 24px 24px;text-align:center;}
         .ph-step{font-size:11px;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;}
         .ph-title{font-size:26px;font-weight:700;color:#111827;letter-spacing:-0.02em;margin-bottom:4px;line-height:1.1;}
@@ -99,7 +100,8 @@ export default function SetupPage() {
 
       <nav className="nav">
         <a href="/" className="back">← Scout Program Builder</a>
-        <div className="nav-r">
+        <div className="nav-r" style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <a href="/help" className="nav-help">? Help</a>
           <div className="nav-dot" style={{background:acc}}>⚜</div>
           <span className="nav-label">Group setup</span>
         </div>
