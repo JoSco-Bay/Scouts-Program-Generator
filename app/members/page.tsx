@@ -41,6 +41,10 @@ const CHALLENGE_AREAS = ['Community','Outdoor','Creative','Personal'];
 
 function genId() { return Math.random().toString(36).slice(2,9); }
 function initials(m: Member) { return `${m.firstName[0]||''}${m.lastName[0]||''}`.toUpperCase(); }
+function formatSIADate(d: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return new Date(d).toLocaleDateString('en-AU');
+  return d;
+}
 
 function calcAttendancePct(member: Member, rows: TermRow[]): number {
   const sessions = rows.filter(r=>r.rowType==='session');
@@ -82,8 +86,10 @@ export default function MembersPage() {
   const [selectedId, setSelectedId]   = useState<string|null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
-  const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:''});
+  const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
+  const [editSIAIdx, setEditSIAIdx] = useState<number | null>(null);
+  const [editSIA, setEditSIA]     = useState({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
   const [addMilAct, setAddMilAct] = useState({sessionId:'',challengeArea:'Community',type:'assist',milestone:'m1'});
   const [showMilForm, setShowMilForm] = useState(false);
 
@@ -160,22 +166,41 @@ export default function MembersPage() {
       projectName:   addSIA.projectName.trim(),
       status:        addSIA.status as 'planning'|'in-progress'|'complete',
       notes:         addSIA.notes,
-      dateCompleted: addSIA.status==='complete' ? new Date().toLocaleDateString('en-AU') : undefined,
+      dateCompleted: addSIA.dateCompleted || undefined,
     };
     saveMembers(members.map(m=>m.id!==memberId?m:{...m,sia:[...m.sia,entry]}));
-    setAddSIA({category:'adventure',projectName:'',status:'planning',notes:''});
+    setAddSIA({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
     setShowSIAForm(false);
   };
 
   const updateSIAStatus = (memberId: string, siaIdx: number, status: string) => {
     saveMembers(members.map(m=>{
       if (m.id!==memberId) return m;
-      const sia = m.sia.map((s,i)=>i!==siaIdx?s:{...s,status:status as 'planning'|'in-progress'|'complete',dateCompleted:status==='complete'?new Date().toLocaleDateString('en-AU'):s.dateCompleted});
+      const sia = m.sia.map((s,i)=>i!==siaIdx?s:{...s,status:status as 'planning'|'in-progress'|'complete'});
       return {...m,sia};
     }));
   };
 
+  const startEditSIA = (siaIdx: number, s: SIAEntry) => {
+    setEditSIA({category:s.category,projectName:s.projectName,status:s.status,notes:s.notes,dateCompleted:s.dateCompleted||''});
+    setEditSIAIdx(siaIdx);
+  };
+
+  const saveEditSIA = (memberId: string) => {
+    if (editSIAIdx===null || !editSIA.projectName.trim()) return;
+    const entry: SIAEntry = {
+      category:      editSIA.category,
+      projectName:   editSIA.projectName.trim(),
+      status:        editSIA.status as 'planning'|'in-progress'|'complete',
+      notes:         editSIA.notes,
+      dateCompleted: editSIA.dateCompleted || undefined,
+    };
+    saveMembers(members.map(m=>m.id!==memberId?m:{...m,sia:m.sia.map((s,i)=>i!==editSIAIdx?s:entry)}));
+    setEditSIAIdx(null);
+  };
+
   const deleteSIA = (memberId: string, siaIdx: number) => {
+    if (editSIAIdx===siaIdx) setEditSIAIdx(null);
     saveMembers(members.map(m=>m.id!==memberId?m:{...m,sia:m.sia.filter((_,i)=>i!==siaIdx)}));
   };
 
@@ -615,6 +640,10 @@ export default function MembersPage() {
                       <div className="af-label">Notes</div>
                       <input className="af-input" value={addSIA.notes} onChange={e=>setAddSIA(d=>({...d,notes:e.target.value}))} placeholder="Any notes..."/>
                     </div>
+                    <div>
+                      <div className="af-label">Date completed</div>
+                      <input className="af-input" type="date" value={addSIA.dateCompleted} onChange={e=>setAddSIA(d=>({...d,dateCompleted:e.target.value}))}/>
+                    </div>
                   </div>
                   <div className="af-actions">
                     <button className="btn-pri" onClick={()=>addSIAEntry(selected.id)}>Add project</button>
@@ -628,6 +657,46 @@ export default function MembersPage() {
                 )}
                 {selected.sia.map((s,i)=>{
                   const cat = SIA_CATEGORIES.find(c=>c.id===s.category);
+                  if (editSIAIdx===i) {
+                    return (
+                      <div key={i} className="sia-item">
+                        <div className="sia-form" style={{flex:1,background:'transparent',border:'none',padding:0}}>
+                          <div className="sia-form-grid">
+                            <div>
+                              <div className="af-label">Category</div>
+                              <select className="af-input" value={editSIA.category} onChange={e=>setEditSIA(d=>({...d,category:e.target.value}))}>
+                                {SIA_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <div className="af-label">Project name</div>
+                              <input className="af-input" value={editSIA.projectName} onChange={e=>setEditSIA(d=>({...d,projectName:e.target.value}))} placeholder="e.g. Learn to ride a bike"/>
+                            </div>
+                            <div>
+                              <div className="af-label">Status</div>
+                              <select className="af-input" value={editSIA.status} onChange={e=>setEditSIA(d=>({...d,status:e.target.value}))}>
+                                <option value="planning">Planning</option>
+                                <option value="in-progress">In progress</option>
+                                <option value="complete">Complete</option>
+                              </select>
+                            </div>
+                            <div>
+                              <div className="af-label">Notes</div>
+                              <input className="af-input" value={editSIA.notes} onChange={e=>setEditSIA(d=>({...d,notes:e.target.value}))} placeholder="Any notes..."/>
+                            </div>
+                            <div>
+                              <div className="af-label">Date completed</div>
+                              <input className="af-input" type="date" value={editSIA.dateCompleted} onChange={e=>setEditSIA(d=>({...d,dateCompleted:e.target.value}))}/>
+                            </div>
+                          </div>
+                          <div className="af-actions">
+                            <button className="btn-pri" onClick={()=>saveEditSIA(selected.id)}>Save</button>
+                            <button className="btn-sec" onClick={()=>setEditSIAIdx(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={i} className="sia-item">
                       <div className="sia-icon">{cat?.icon||'⭐'}</div>
@@ -638,11 +707,12 @@ export default function MembersPage() {
                         </div>
                         <div className="sia-cat">{cat?.label}</div>
                         {s.notes&&<div className="sia-notes">{s.notes}</div>}
-                        {s.dateCompleted&&<div className="sia-notes">Completed: {s.dateCompleted}</div>}
+                        {s.dateCompleted&&<div className="sia-notes">Completed: {formatSIADate(s.dateCompleted)}</div>}
                         <div className="sia-actions">
                           {s.status!=='complete'&&<button className="btn-sm" onClick={()=>updateSIAStatus(selected.id,i,'in-progress')}>In progress</button>}
                           {s.status!=='complete'&&<button className="btn-sm" style={{borderColor:acc,color:acc}} onClick={()=>updateSIAStatus(selected.id,i,'complete')}>Mark complete</button>}
-                          <button className="btn-danger" onClick={()=>deleteSIA(selected.id,i)}>🗑</button>
+                          <button className="btn-sm" onClick={()=>startEditSIA(i,s)}>Edit</button>
+                          <button className="btn-danger" onClick={()=>deleteSIA(selected.id,i)}>Delete</button>
                         </div>
                       </div>
                     </div>

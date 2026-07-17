@@ -88,6 +88,7 @@ saveRunSheet(userId, groupId, termRowId, sheet, existingDbId?) → string (dbId)
 | `programRows` | `TermRow[]` JSON | `/term` `handleUpload` | Backup written on JSON file upload; read as fallback if Supabase returns nothing |
 | `groupConfig` | `GroupConfig` JSON | `/term` `handleUpload` | Same backup/fallback pattern as `programRows` |
 | `termName` | `string` | `/term` `handleUpload` | Supabase doesn't store termName; localStorage is the only store |
+| `members` | `Member[]` JSON | `lib/db.ts` `loadMembers`/`upsertMembers`/`deleteMemberById` | Read-through cache of the `members` table; written on every successful Supabase read/write, read as fallback when Supabase errors |
 
 ## Supabase schema — current state (as of 2026-06-27)
 
@@ -128,7 +129,7 @@ if (authLoading || dbLoading) return null;
 - **`config.members`** (plain `string[]`) = names entered on the setup page. Used for dropdowns in the term plan.
 - **`members` table** (full `Member[]` objects) = members added through the Members tab. Has attendance, OAS, SIA, milestones.
 - These are two separate stores. The term plan edit form merges both for dropdowns: `config.leaders + config.members + memberNames` (deduped, trimmed).
-- **No member seeding**: setup save does NOT auto-create Member objects in the members table. Members must be added manually in the Members tab.
+- **Member seeding on setup save**: `app/setup/page.tsx` `save()` seeds `config.members` names into the members table. For each name, split on the first space (`firstName` = text before, `lastName` = remainder, or `''` if no space) and skip it if a member with that exact trimmed full name already exists (case-sensitive). New members get empty `attendance`/`oas`/`sia`/`milestoneActivities`/`milestonesAwarded`, `peakAwarded: false`, `age: 0`, `yearJoined` = current year. This does not overwrite or delete existing members — it only adds ones not already present.
 - **Delete vs upsert**: `upsertMembers` cannot handle deletions. `deleteMember` calls `deleteMemberById` directly then updates state — does NOT go through `saveMembers`.
 - **`replaceTermRows`** (delete all + insert) is used by `buildDates` to handle regenerating dates cleanly. `upsertTermRows` is used for incremental saves.
 - **`term_row_id` nullability**: run sheets created from the term plan get `term_row_id = source.row.id` (when `source.isTermRow === true`). Quick-create run sheets get `term_row_id = null`.
@@ -144,6 +145,12 @@ if (authLoading || dbLoading) return null;
 - **Participate** is auto-counted from the attendance grid (sessions attended). It is NOT a manual log type.
 - The "Log Activity" form only has **Assist** and **Lead** as type options.
 - `calcMilestoneProgress()` reads attendance for the participate count, and `milestoneActivities[]` for assist/lead counts.
+
+## Members tab — SIA entries
+
+- SIA entries are fully editable: each item has an **Edit** button that opens an inline form (same fields as "Add project" — category, project name, status, notes, date completed) pre-filled from the entry, saved in place via `saveEditSIA`.
+- `dateCompleted` is a manual `<input type="date">` on both the add and edit forms — it is never auto-set when status is changed to `complete`. Stored as `YYYY-MM-DD`; `formatSIADate()` renders it as `en-AU` for display and falls back to the raw string for older entries stored as locale-formatted text.
+- Delete button on an SIA entry is labelled "Delete" (plain text, not an emoji — emoji glyphs render unreliably as tofu/"II" in some environments).
 
 ## Run sheet API (`generate-runsheet/route.ts`)
 

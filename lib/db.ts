@@ -176,26 +176,49 @@ function memberToDb(m: Member, groupId: string) {
   };
 }
 
+function getLocalMembersCache(): Member[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const cached = localStorage.getItem('members');
+    return cached ? JSON.parse(cached) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setLocalMembersCache(members: Member[]): void {
+  if (typeof window !== 'undefined') localStorage.setItem('members', JSON.stringify(members));
+}
+
 export async function loadMembers(_userId: string): Promise<Member[]> {
   const gid = getLocalGroupId();
-  if (!gid) return [];
-  const { data } = await supabase
+  if (!gid) return getLocalMembersCache();
+  const { data, error } = await supabase
     .from('members')
     .select('*')
     .eq('group_id', gid)
     .order('created_at');
-  return (data || []).map(memberFromDb);
+  if (error) return getLocalMembersCache();
+  const members = (data || []).map(memberFromDb);
+  setLocalMembersCache(members);
+  return members;
 }
 
 export async function upsertMembers(_userId: string, groupId: string, members: Member[]): Promise<void> {
   if (!members.length) return;
-  await supabase
+  const { error } = await supabase
     .from('members')
     .upsert(members.map(m => memberToDb(m, groupId)), { onConflict: 'id' });
+  if (!error) {
+    const byId = new Map(getLocalMembersCache().map(m => [m.id, m]));
+    members.forEach(m => byId.set(m.id, m));
+    setLocalMembersCache(Array.from(byId.values()));
+  }
 }
 
 export async function deleteMemberById(_userId: string, memberId: string): Promise<void> {
-  await supabase.from('members').delete().eq('id', memberId);
+  const { error } = await supabase.from('members').delete().eq('id', memberId);
+  if (!error) setLocalMembersCache(getLocalMembersCache().filter(m => m.id !== memberId));
 }
 
 // ── Run Sheets ────────────────────────────────────────────────────────────────

@@ -2,8 +2,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig } from "@/lib/types";
-import { loadGroupRecord, saveGroupConfig } from "@/lib/db";
+import type { GroupConfig, Member } from "@/lib/types";
+import { loadGroupRecord, saveGroupConfig, loadMembers, upsertMembers } from "@/lib/db";
+
+function genId() { return Math.random().toString(36).slice(2,9); }
 
 const SECTIONS = Object.entries(SECTION_COLOURS).map(([id, v]) => ({ id, ...v }));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -100,6 +102,36 @@ export default function SetupPage() {
       const newGroupId = await saveGroupConfig('', groupId, config);
       setGroupId(newGroupId);
       localStorage.setItem('groupConfig', JSON.stringify(config));
+
+      // Seed member names into the members table, skipping existing exact full-name matches
+      const existingMembers = await loadMembers('');
+      const existingNames = new Set(
+        existingMembers.map(m => `${m.firstName.trim()} ${m.lastName.trim()}`.trim())
+      );
+      const newMembers: Member[] = [];
+      for (const name of config.members) {
+        const fullName = name.trim();
+        if (!fullName || existingNames.has(fullName)) continue;
+        const spaceIdx = fullName.indexOf(' ');
+        const firstName = spaceIdx === -1 ? fullName : fullName.slice(0, spaceIdx);
+        const lastName  = spaceIdx === -1 ? '' : fullName.slice(spaceIdx + 1);
+        newMembers.push({
+          id: genId(),
+          firstName,
+          lastName,
+          age: 0,
+          yearJoined: new Date().getFullYear(),
+          attendance: {},
+          oas: {},
+          sia: [],
+          milestoneActivities: [],
+          milestonesAwarded: [],
+          peakAwarded: false,
+        });
+        existingNames.add(fullName);
+      }
+      if (newMembers.length) await upsertMembers('', newGroupId, newMembers);
+
       router.push('/term');
     } catch (err) {
       console.error('saveGroupConfig failed:', err);
