@@ -1,8 +1,14 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, TermRow } from "@/lib/types";
+import type { GroupConfig, TermRow, Member } from "@/lib/types";
+import { useAuth } from "@/lib/auth-context";
+import {
+  loadGroupRecord, saveGroupConfig,
+  loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
+  loadMembers, upsertMembers,
+} from "@/lib/db";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
@@ -16,7 +22,7 @@ const COLUMN_DEFS = [
   { key:'assistantPatrol',label:'Asst. patrol',  width:'74px'  },
 ];
 
-const PLAN_FILE_TYPE = 'scout-program-builder-term-plan'; // single source of truth
+const PLAN_FILE_TYPE = 'scout-program-builder-term-plan';
 
 function genId() { return Math.random().toString(36).slice(2,9); }
 
@@ -46,41 +52,124 @@ function dateSortKey(row: TermRow, yearHint: number): number {
   return isNaN(parsed) ? Infinity : parsed;
 }
 
+// ── Tooltip component (replaces dangerouslySetInnerHTML) ──────────────────────
+function InfoBtn({ title, body, tip }: { title: string; body: string; tip?: string }) {
+  return (
+    <span className="info-btn">
+      i
+      <div className="tt">
+        <div className="tt-title">{title}</div>
+        <div className="tt-body">{body}</div>
+        {tip && <div className="tt-tip">{tip}</div>}
+      </div>
+    </span>
+  );
+}
+
 export default function TermPage() {
   const router = useRouter();
-  const [config, setConfig] = useState<GroupConfig|null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const [groupId, setGroupId]     = useState<string | null>(null);
+  const [dbLoading, setDbLoading] = useState(true);
+  const [config, setConfig]       = useState<GroupConfig|null>(null);
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [termName, setTermName] = useState('Term 2, 2026');
-  const [rows, setRows] = useState<TermRow[]>([]);
+  const [endDate, setEndDate]     = useState('');
+  const [termName, setTermName]   = useState('Term 2, 2026');
+  const [rows, setRows]           = useState<TermRow[]>([]);
+  const [fullMembers, setFullMembers] = useState<Member[]>([]);
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editDraft, setEditDraft] = useState<Partial<TermRow>>({});
   const [memberNames, setMemberNames] = useState<string[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [datesSet, setDatesSet] = useState(false);
+  const [generating, setGenerating]   = useState(false);
+  const [datesSet, setDatesSet]       = useState(false);
   const [visibleCols, setVisibleCols] = useState<Record<string,boolean>>(
     Object.fromEntries(COLUMN_DEFS.map(c=>[c.key,true]))
   );
-  const [showColPicker, setShowColPicker] = useState(false);
+  const [showColPicker, setShowColPicker]   = useState(false);
   const [showThemePanel, setShowThemePanel] = useState(false);
-  const [selectedOAS, setSelectedOAS] = useState<string[]>([]);
+  const [selectedOAS, setSelectedOAS]       = useState<string[]>([]);
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
   const [aiError, setAiError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Tooltip click handler ──────────────────────────────────────────────────
+  useEffect(() => {
+    function closeAll() {
+      document.querySelectorAll('.tt').forEach(t => t.classList.remove('show'));
+      document.querySelectorAll('.info-btn').forEach(b => b.classList.remove('open'));
+    }
+    function handleClick(e: MouseEvent) {
+      const btn = (e.target as Element).closest('.info-btn');
+      if (!btn) { closeAll(); return; }
+      const tt = btn.querySelector('.tt');
+      const wasOpen = tt && tt.classList.contains('show');
+      closeAll();
+      if (tt && !wasOpen) { tt.classList.add('show'); btn.classList.add('open'); }
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  // ── Load from Supabase (or localStorage fallback) ─────────────────────────
   useEffect(()=>{
-    const c = localStorage.getItem('groupConfig'); if (c) setConfig(JSON.parse(c));
-    const t = localStorage.getItem('programRows'); if (t) { setRows(JSON.parse(t)); setDatesSet(true); }
-    const m = localStorage.getItem('members'); if(m) setMemberNames(JSON.parse(m).map((mem: any) => mem.firstName + ' ' + mem.lastName));
+    // Phase 4: no auth required — load by groupId from localStorage
+    async function load() {
+      const [grp, termRows, members] = await Promise.all([
+        loadGroupRecord(''),
+        loadTermRows(''),
+        loadMembers(''),
+      ]);
+      if (grp) {
+        setGroupId(grp.id);
+        setConfig(grp.config);
+      } else {
+        const cached = localStorage.getItem('groupConfig');
+        if (cached) try { setConfig(JSON.parse(cached)); } catch {}
+      }
+      if (termRows.length) {
+        setRows(termRows); setDatesSet(true);
+      } else {
+        const cached = localStorage.getItem('programRows');
+        if (cached) try { const r = JSON.parse(cached); setRows(r); setDatesSet(r.length > 0); } catch {}
+      }
+      const cachedTermName = localStorage.getItem('termName');
+      if (cachedTermName) setTermName(cachedTermName);
+      setFullMembers(members);
+      setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
+      setDbLoading(false);
+    }
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  const sc = config ? SECTION_COLOURS[config.section] || SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
-  const acc = sc.accent;
+  // ── localStorage cache — keep in sync whenever rows/config change ──────────
+  useEffect(() => {
+    if (rows.length > 0) localStorage.setItem('programRows', JSON.stringify(rows));
+  }, [rows]);
+
+  useEffect(() => {
+    if (config) localStorage.setItem('groupConfig', JSON.stringify(config));
+  }, [config]);
+
+  useEffect(() => {
+    if (termName) localStorage.setItem('termName', termName);
+  }, [termName]);
+
+  const sc  = config ? SECTION_COLOURS[config.section] || SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
+  const acc  = sc.accent;
   const pale = sc.pale;
 
-  const buildDates = useCallback(()=>{
-    if (!startDate||!endDate||!config) return;
+  const saveRows = useCallback(async (r: TermRow[]) => {
+    setRows(r);
+    localStorage.setItem('programRows', JSON.stringify(r));
+    if (!groupId) return;
+    try { await upsertTermRows('', groupId, r); }
+    catch (e) { console.error('Term rows save failed:', e); }
+  }, [groupId]);
+
+  const buildDates = useCallback(async ()=>{
+    if (!startDate||!endDate||!config||!groupId) return;
     const dates = getMeetingDates(startDate, endDate, config.meetingDay);
     const newRows: TermRow[] = dates.map(d=>({
       id:genId(), date:d.date, time:fmt12(config.meetingTime),
@@ -90,16 +179,29 @@ export default function TermPage() {
     }));
     setRows(newRows); setDatesSet(true);
     localStorage.setItem('programRows', JSON.stringify(newRows));
-  },[startDate,endDate,config]);
+    try { await replaceTermRows('', groupId, newRows); }
+    catch (e) { console.error('Build dates save failed:', e); }
+  },[startDate,endDate,config,groupId]);
 
-  const saveRows = (r: TermRow[]) => { setRows(r); localStorage.setItem('programRows', JSON.stringify(r)); };
+  const sortByDate = useCallback((arr: TermRow[]) => {
+    const yearMatch = termName.match(/(\d{4})/);
+    const yearHint = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
+    return [...arr].sort((a,b)=>dateSortKey(a,yearHint)-dateSortKey(b,yearHint));
+  }, [termName]);
+
   const startEdit = (row: TermRow) => { setEditingId(row.id); setEditDraft({...row}); };
-  const saveEdit = () => { saveRows(rows.map(r=>r.id===editingId?{...r,...editDraft} as TermRow:r)); setEditingId(null); };
-  const deleteRow = (id: string) => { if (confirm('Remove this row?')) saveRows(rows.filter(r=>r.id!==id)); };
+  const saveEdit  = () => { saveRows(sortByDate(rows.map(r=>r.id===editingId?{...r,...editDraft} as TermRow:r))); setEditingId(null); };
+
+  const deleteRow = async (id: string) => {
+    if (!confirm('Remove this row?')) return;
+    setRows(r => r.filter(x => x.id !== id));
+    try { await deleteTermRow('', id); }
+    catch (e) { console.error('Term row delete failed:', e); }
+  };
 
   const addRow = (type: 'session'|'extra') => {
     const nr: TermRow = {id:genId(),date:'',time:type==='session'?fmt12(config?.meetingTime||'18:00'):'',topic:'',location:type==='session'?'Hall':'',oasFocus:'',sessionNotes:'',bring:'',leader:config?.leaders[0]||'',assistantPatrol:'',consentRequired:false,rowType:type};
-    const updated = [...rows,nr]; saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
+    const updated = sortByDate([...rows,nr]); saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
   };
 
   const moveRow = (id: string, dir: -1|1) => {
@@ -120,13 +222,12 @@ export default function TermPage() {
   const removeExtraEventDraft = (i: number) => setExtraEventsDraft(d=>d.filter((_,idx)=>idx!==i));
 
   const downloadPlan = () => {
-    const membersData = localStorage.getItem('members');
     const payload = {
-      type: PLAN_FILE_TYPE,  // FIX: was mismatched between save and load
+      type: PLAN_FILE_TYPE,
       version: 1,
       savedAt: new Date().toISOString(),
       termName, startDate, endDate, config, rows,
-      members: membersData ? JSON.parse(membersData) : [],
+      members: fullMembers,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
@@ -141,20 +242,34 @@ export default function TermPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const data = JSON.parse(ev.target?.result as string);
-        // FIX: check matches the constant used in downloadPlan
         if (data.type !== PLAN_FILE_TYPE) {
           alert("This file doesn't look like a Scout Program Builder term plan.");
           return;
         }
-        if (data.termName) setTermName(data.termName);
+        if (data.termName) { setTermName(data.termName); localStorage.setItem('termName', data.termName); }
         if (data.startDate) setStartDate(data.startDate);
         if (data.endDate) setEndDate(data.endDate);
-        if (data.config) { setConfig(data.config); localStorage.setItem('groupConfig', JSON.stringify(data.config)); }
-        if (data.rows) { setRows(data.rows); setDatesSet(true); localStorage.setItem('programRows', JSON.stringify(data.rows)); }
-        if (data.members) { localStorage.setItem('members', JSON.stringify(data.members)); }
+
+        let activeGroupId = groupId;
+        if (data.config) {
+          setConfig(data.config);
+          localStorage.setItem('groupConfig', JSON.stringify(data.config));
+          activeGroupId = await saveGroupConfig('', groupId, data.config);
+          setGroupId(activeGroupId);
+        }
+        if (data.rows && activeGroupId) {
+          setRows(data.rows); setDatesSet(true);
+          localStorage.setItem('programRows', JSON.stringify(data.rows));
+          await replaceTermRows('', activeGroupId, data.rows);
+        }
+        if (data.members && activeGroupId) {
+          setFullMembers(data.members);
+          setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
+          await upsertMembers('', activeGroupId, data.members);
+        }
       } catch {
         alert('Could not read this file — it may be corrupted or not a valid term plan file.');
       }
@@ -198,22 +313,23 @@ export default function TermPage() {
 
       saveRows(finalRows);
       setShowThemePanel(false);
-    } catch(err: any) {
-      setAiError(err.message || 'Something went wrong generating themes. Please try again.');
+    } catch(err: unknown) {
+      setAiError((err as Error).message || 'Something went wrong generating themes. Please try again.');
     } finally {
       setGenerating(false);
     }
   };
 
   const openRunSheet = (row: TermRow) => {
-    localStorage.setItem('runSheetSource', JSON.stringify({row,config}));
+    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true}));
     router.push('/runsheet');
   };
 
-
   const sessionCount = rows.filter(r=>r.rowType==='session').length;
-  const activeCols = COLUMN_DEFS.filter(c=>visibleCols[c.key]);
+  const activeCols   = COLUMN_DEFS.filter(c=>visibleCols[c.key]);
   const colSpanTotal = activeCols.length + 1;
+
+  if (dbLoading) return null;
 
   return (
     <>
@@ -342,12 +458,6 @@ export default function TermPage() {
         .tt-body{font-size:11.5px;color:#6b7280;line-height:1.55;}
         .tt-tip{font-size:11px;color:#C17F24;margin-top:6px;display:flex;align-items:baseline;gap:4px;}
         .tt-tip::before{content:'→';flex-shrink:0;}
-        .rs-list{display:flex;flex-direction:column;gap:10px;}
-        .rs-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-        .rs-date{font-size:12px;color:#6b7280;margin-bottom:2px;}
-        .rs-topic{font-size:14px;font-weight:600;color:#111827;}
-        .rs-view{font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
-        .rs-view:hover{background:${pale};}
         @media print {
           .nav,.ph,.setup-card,.toolbar,.theme-panel,.add-row,.leg,.act-col,th:last-child,td:last-child{display:none!important;}
           body{background:#fff;}
@@ -407,7 +517,11 @@ export default function TermPage() {
             <button className="gen-btn" style={{background:acc}} onClick={buildDates} disabled={!startDate||!endDate}>
               Generate dates
             </button>
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Generate dates</div><div class="tt-body">Enter a term start and end date, then click Generate dates. The app will create a row for every ${config?.meetingDay||'meeting'} in that date range.</div><div class="tt-tip">You can add extra events or manually add weeks after generating</div></div></span>`}}/>
+            <InfoBtn
+              title="Generate dates"
+              body={`Enter a term start and end date, then click Generate dates. The app will create a row for every ${config?.meetingDay||'meeting'} in that date range.`}
+              tip="You can add extra events or manually add weeks after generating"
+            />
           </div>
         </div>
 
@@ -419,7 +533,13 @@ export default function TermPage() {
               <button className={`tbtn ${showThemePanel?'active':''}`} onClick={()=>setShowThemePanel(s=>!s)}>
                 ✦ AI suggest themes
               </button>
-              <span style={{position:'relative',display:'inline-flex',alignItems:'center'}} dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">AI suggest themes</div><div class="tt-body">Opens a panel where you can select OAS focus areas, add notes about the term direction, and list any special events. AI then fills in all the weekly topics for you.</div><div class="tt-tip">You can still edit each row manually after AI fills them in</div></div></span>`}}/>
+              <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
+                <InfoBtn
+                  title="AI suggest themes"
+                  body="Opens a panel where you can select OAS focus areas, add notes about the term direction, and list any special events. AI then fills in all the weekly topics for you."
+                  tip="You can still edit each row manually after AI fills them in"
+                />
+              </span>
               <div style={{position:'relative'}}>
                 <button className="tbtn" onClick={()=>setShowColPicker(s=>!s)}>☰ Columns</button>
                 {showColPicker && (
@@ -448,8 +568,8 @@ export default function TermPage() {
             <div className="theme-panel">
               <div className="theme-panel-head">
                 <div>
-                  <div className="theme-panel-title">Plan this term's themes</div>
-                  <div className="theme-panel-desc">Pick OAS focus areas, add notes about the term's direction, and add any special events. AI will fill in the weekly topics for you.</div>
+                  <div className="theme-panel-title">Plan this term&apos;s themes</div>
+                  <div className="theme-panel-desc">Pick OAS focus areas, add notes about the term&apos;s direction, and add any special events. AI will fill in the weekly topics for you.</div>
                 </div>
                 <button className="close-x" onClick={()=>setShowThemePanel(false)}>✕</button>
               </div>
@@ -511,8 +631,8 @@ export default function TermPage() {
                 </thead>
                 <tbody>
                   {rows.map((row,idx)=>(
-                    <>
-                      <tr key={row.id} className={`${row.rowType==='session'?'session':'extra'} ${editingId===row.id?'editing':''}`}>
+                    <Fragment key={row.id}>
+                      <tr className={`${row.rowType==='session'?'session':'extra'} ${editingId===row.id?'editing':''}`}>
                         {activeCols.map(c=>{
                           if (c.key==='date') return <td key="date"><div className="dm">{row.date}</div><div className="dt">{row.time}</div></td>;
                           if (c.key==='topic') return (
@@ -625,7 +745,7 @@ export default function TermPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -668,19 +788,6 @@ export default function TermPage() {
         </>
       </div>
 
-      <script dangerouslySetInnerHTML={{__html:`
-        (function(){
-          function closeAll(){ document.querySelectorAll('.tt').forEach(t=>t.classList.remove('show')); document.querySelectorAll('.info-btn').forEach(b=>b.classList.remove('open')); }
-          document.addEventListener('click',function(e){
-            const btn = e.target.closest('.info-btn');
-            if(!btn){ closeAll(); return; }
-            const tt = btn.querySelector('.tt');
-            const wasOpen = tt && tt.classList.contains('show');
-            closeAll();
-            if(tt && !wasOpen){ tt.classList.add('show'); btn.classList.add('open'); }
-          });
-        })();
-      `}}/>
     </>
   );
 }

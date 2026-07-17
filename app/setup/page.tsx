@@ -3,48 +3,110 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig } from "@/lib/types";
+import { loadGroupRecord, saveGroupConfig } from "@/lib/db";
 
 const SECTIONS = Object.entries(SECTION_COLOURS).map(([id, v]) => ({ id, ...v }));
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
+// ── Tooltip component (replaces dangerouslySetInnerHTML) ──────────────────────
+function InfoBtn({ title, body, tip }: { title: string; body: string; tip?: string }) {
+  return (
+    <span className="info-btn">
+      i
+      <div className="tt">
+        <div className="tt-title">{title}</div>
+        <div className="tt-body">{body}</div>
+        {tip && <div className="tt-tip">{tip}</div>}
+      </div>
+    </span>
+  );
+}
+
 export default function SetupPage() {
   const router = useRouter();
-  const [groupName, setGroupName] = useState('');
-  const [section, setSection] = useState<keyof typeof SECTION_COLOURS>('Joeys');
+  const [groupId, setGroupId]       = useState<string | null>(null);
+  const [dbLoading, setDbLoading]   = useState(true);
+  const [groupName, setGroupName]   = useState('');
+  const [section, setSection]       = useState<keyof typeof SECTION_COLOURS>('Joeys');
   const [meetingDay, setMeetingDay] = useState('Wednesday');
   const [meetingTime, setMeetingTime] = useState('18:00');
-  const [leaders, setLeaders] = useState(['']);
-  const [members, setMembers] = useState(['']);
+  const [leaders, setLeaders]       = useState(['']);
+  const [members, setMembers]       = useState(['']);
 
+  // ── Tooltip click handler ──────────────────────────────────────────────────
   useEffect(() => {
-    const saved = localStorage.getItem('groupConfig');
-    if (saved) {
-      const c: GroupConfig = JSON.parse(saved);
-      setGroupName(c.groupName || '');
-      setSection(c.section || 'Joeys');
-      setMeetingDay(c.meetingDay || 'Wednesday');
-      setMeetingTime(c.meetingTime || '18:00');
-      setLeaders(c.leaders?.length ? c.leaders : ['']);
-      setMembers(c.members?.length ? c.members : ['']);
+    function closeAll() {
+      document.querySelectorAll('.tt').forEach(t => t.classList.remove('show'));
+      document.querySelectorAll('.info-btn').forEach(b => b.classList.remove('open'));
     }
+    function handleClick(e: MouseEvent) {
+      const btn = (e.target as Element).closest('.info-btn');
+      if (!btn) { closeAll(); return; }
+      const tt = btn.querySelector('.tt');
+      const wasOpen = tt && tt.classList.contains('show');
+      closeAll();
+      if (tt && !wasOpen) { tt.classList.add('show'); btn.classList.add('open'); }
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
   }, []);
 
-  const acc = SECTION_COLOURS[section]?.accent || '#C17F24';
-  const accText = SECTION_COLOURS[section]?.text || '#fff';
+  // ── Load group from Supabase (by groupId in localStorage) ─────────────────
+  useEffect(() => {
+    async function load() {
+      const record = await loadGroupRecord('');
+      if (record) {
+        setGroupId(record.id);
+        const c = record.config;
+        setGroupName(c.groupName || '');
+        setSection((c.section as keyof typeof SECTION_COLOURS) || 'Joeys');
+        setMeetingDay(c.meetingDay || 'Wednesday');
+        setMeetingTime(c.meetingTime || '18:00');
+        setLeaders(c.leaders?.length ? c.leaders : ['']);
+        setMembers(c.members?.length ? c.members : ['']);
+      } else {
+        // Fall back to localStorage cache
+        const cached = localStorage.getItem('groupConfig');
+        if (cached) {
+          try {
+            const c: GroupConfig = JSON.parse(cached);
+            setGroupName(c.groupName || '');
+            setSection((c.section as keyof typeof SECTION_COLOURS) || 'Joeys');
+            setMeetingDay(c.meetingDay || 'Wednesday');
+            setMeetingTime(c.meetingTime || '18:00');
+            setLeaders(c.leaders?.length ? c.leaders : ['']);
+            setMembers(c.members?.length ? c.members : ['']);
+          } catch {}
+        }
+      }
+      setDbLoading(false);
+    }
+    load();
+  }, []);
 
-  const save = () => {
-    const filteredMembers = members.filter(Boolean);
-    const config: GroupConfig = {
-      groupName,
-      section,
-      meetingDay,
-      meetingTime,
-      leaders: leaders.filter(Boolean),
-      members: filteredMembers,
-    };
-    localStorage.setItem('groupConfig', JSON.stringify(config));
-    router.push('/term');
+  const acc     = SECTION_COLOURS[section]?.accent || '#C17F24';
+  const accText = SECTION_COLOURS[section]?.text   || '#fff';
+
+  const save = async () => {
+    try {
+      const config: GroupConfig = {
+        groupName,
+        section,
+        meetingDay,
+        meetingTime,
+        leaders: leaders.filter(Boolean),
+        members: members.filter(Boolean),
+      };
+      const newGroupId = await saveGroupConfig('', groupId, config);
+      setGroupId(newGroupId);
+      localStorage.setItem('groupConfig', JSON.stringify(config));
+      router.push('/term');
+    } catch (err) {
+      console.error('saveGroupConfig failed:', err);
+    }
   };
+
+  if (dbLoading) return null;
 
   return (
     <>
@@ -110,7 +172,7 @@ export default function SetupPage() {
       <div className="ph">
         <div className="ph-step">Step 1 of 3 · Group setup</div>
         <div className="ph-title">Set up your <em style={{color:acc}}>group</em></div>
-        <div className="ph-sub">Saved locally — you can update this any time</div>
+        <div className="ph-sub">Saved to your account — update any time</div>
       </div>
 
       <div className="body">
@@ -118,7 +180,10 @@ export default function SetupPage() {
           <div className="card-head">
             <div className="cn" style={{background:acc}}>1</div>
             Group details
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Group details</div><div class="tt-body">Your group name appears on every term plan and run sheet. The section sets the colour theme throughout the app.</div></div></span>`}}/>
+            <InfoBtn
+              title="Group details"
+              body="Your group name appears on every term plan and run sheet. The section sets the colour theme throughout the app."
+            />
           </div>
           <div className="cb">
             <div className="field">
@@ -144,7 +209,11 @@ export default function SetupPage() {
           <div className="card-head">
             <div className="cn" style={{background:acc}}>2</div>
             Meeting schedule
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Meeting schedule</div><div class="tt-body">Your usual meeting day and time. The term planner uses this to auto-generate all your session dates when you enter term start and end dates.</div><div class="tt-tip">You can override the time for individual sessions in the term plan</div></div></span>`}}/>
+            <InfoBtn
+              title="Meeting schedule"
+              body="Your usual meeting day and time. The term planner uses this to auto-generate all your session dates when you enter term start and end dates."
+              tip="You can override the time for individual sessions in the term plan"
+            />
           </div>
           <div className="cb">
             <div className="two">
@@ -166,7 +235,11 @@ export default function SetupPage() {
           <div className="card-head">
             <div className="cn" style={{background:acc}}>3</div>
             Leaders
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Leaders</div><div class="tt-body">Add all leaders who run sessions. The first leader is set as default on each term plan row — you can change who leads each night individually.</div><div class="tt-tip">Co-leaders can be assigned per session in the term plan</div></div></span>`}}/>
+            <InfoBtn
+              title="Leaders"
+              body="Add all leaders who run sessions. The first leader is set as default on each term plan row — you can change who leads each night individually."
+              tip="Co-leaders can be assigned per session in the term plan"
+            />
           </div>
           <div className="cb">
             {leaders.map((l,i)=>(
@@ -183,7 +256,11 @@ export default function SetupPage() {
           <div className="card-head">
             <div className="cn" style={{background:acc}}>4</div>
             Members <span className="card-opt">optional</span>
-            <span dangerouslySetInnerHTML={{__html:`<span class="info-btn">i<div class="tt"><div class="tt-title">Members list</div><div class="tt-body">Add your member names here — they'll appear in the leader and patrol dropdowns in the term plan. To track attendance, OAS progress, and milestones, add members properly in the Members tab.</div><div class="tt-tip">Members tab is where full tracking happens</div></div></span>`}}/>
+            <InfoBtn
+              title="Members list"
+              body="Add your member names here — they'll appear in the leader and patrol dropdowns in the term plan. To track attendance, OAS progress, and milestones, add members properly in the Members tab."
+              tip="Members tab is where full tracking happens"
+            />
           </div>
           <div className="cb">
             {members.map((m,i)=>(
@@ -201,19 +278,6 @@ export default function SetupPage() {
         </button>
       </div>
 
-      <script dangerouslySetInnerHTML={{__html:`
-        (function(){
-          function closeAll(){ document.querySelectorAll('.tt').forEach(t=>t.classList.remove('show')); document.querySelectorAll('.info-btn').forEach(b=>b.classList.remove('open')); }
-          document.addEventListener('click',function(e){
-            const btn = e.target.closest('.info-btn');
-            if(!btn){ closeAll(); return; }
-            const tt = btn.querySelector('.tt');
-            const wasOpen = tt && tt.classList.contains('show');
-            closeAll();
-            if(tt && !wasOpen){ tt.classList.add('show'); btn.classList.add('open'); }
-          });
-        })();
-      `}}/>
     </>
   );
 }

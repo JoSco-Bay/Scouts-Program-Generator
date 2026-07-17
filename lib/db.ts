@@ -1,0 +1,268 @@
+import { supabase } from './supabase';
+import type { GroupConfig, TermRow, Member, SavedRunSheet } from './types';
+
+// ── Local group identity ──────────────────────────────────────────────────────
+
+function getLocalGroupId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('groupId');
+}
+
+function setLocalGroupId(id: string): void {
+  if (typeof window !== 'undefined') localStorage.setItem('groupId', id);
+}
+
+// ── Groups ────────────────────────────────────────────────────────────────────
+
+export interface GroupRecord {
+  id: string;
+  config: GroupConfig;
+}
+
+export async function loadGroupRecord(_userId: string): Promise<GroupRecord | null> {
+  const gid = getLocalGroupId();
+  if (!gid) return null;
+  const { data } = await supabase
+    .from('groups')
+    .select('*')
+    .eq('id', gid)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    id: data.id,
+    config: {
+      groupName:   data.group_name,
+      section:     data.section,
+      meetingDay:  data.meeting_day,
+      meetingTime: data.meeting_time,
+      leaders:     data.leaders  || [],
+      members:     data.members  || [],
+    },
+  };
+}
+
+export async function saveGroupConfig(
+  _userId: string,
+  groupId: string | null,
+  config: GroupConfig,
+): Promise<string> {
+  const payload = {
+    group_name:   config.groupName,
+    section:      config.section,
+    meeting_day:  config.meetingDay,
+    meeting_time: config.meetingTime,
+    leaders:      config.leaders,
+    members:      config.members,
+    updated_at:   new Date().toISOString(),
+  };
+  const gid = groupId || getLocalGroupId();
+  if (gid) {
+    const { error } = await supabase.from('groups').update(payload).eq('id', gid);
+    if (error) throw new Error(`Failed to update group: ${error.message}`);
+    return gid;
+  }
+  const { data, error } = await supabase
+    .from('groups')
+    .insert(payload)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`Failed to insert group: ${error.message}`);
+  if (!data) throw new Error('Group record not returned after insert');
+  setLocalGroupId(data.id);
+  return data.id;
+}
+
+// ── Term Rows ─────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowFromDb(d: any): TermRow {
+  return {
+    id:              d.id,
+    date:            d.date,
+    time:            d.time,
+    topic:           d.topic,
+    location:        d.location,
+    oasFocus:        d.oas_focus,
+    sessionNotes:    d.session_notes,
+    bring:           d.bring,
+    leader:          d.leader,
+    assistantPatrol: d.assistant_patrol,
+    consentRequired: d.consent_required,
+    rowType:         d.row_type,
+  };
+}
+
+function rowToDb(r: TermRow, groupId: string, sortOrder: number) {
+  return {
+    id:               r.id,
+    group_id:         groupId,
+    date:             r.date,
+    time:             r.time,
+    topic:            r.topic,
+    location:         r.location,
+    oas_focus:        r.oasFocus,
+    session_notes:    r.sessionNotes,
+    bring:            r.bring,
+    leader:           r.leader,
+    assistant_patrol: r.assistantPatrol,
+    consent_required: r.consentRequired,
+    row_type:         r.rowType,
+    sort_order:       sortOrder,
+  };
+}
+
+export async function loadTermRows(_userId: string): Promise<TermRow[]> {
+  const gid = getLocalGroupId();
+  if (!gid) return [];
+  const { data } = await supabase
+    .from('term_rows')
+    .select('*')
+    .eq('group_id', gid)
+    .order('sort_order');
+  return (data || []).map(rowFromDb);
+}
+
+export async function upsertTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
+  if (!rows.length) return;
+  await supabase
+    .from('term_rows')
+    .upsert(rows.map((r, i) => rowToDb(r, groupId, i)), { onConflict: 'id' });
+}
+
+export async function replaceTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
+  await supabase.from('term_rows').delete().eq('group_id', groupId);
+  if (rows.length) {
+    await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
+  }
+}
+
+export async function deleteTermRow(_userId: string, rowId: string): Promise<void> {
+  await supabase.from('term_rows').delete().eq('id', rowId);
+}
+
+// ── Members ───────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function memberFromDb(d: any): Member {
+  return {
+    id:                  d.id,
+    firstName:           d.first_name,
+    lastName:            d.last_name,
+    age:                 d.age,
+    yearJoined:          d.year_joined,
+    attendance:          d.attendance          || {},
+    oas:                 d.oas                 || {},
+    sia:                 d.sia                 || [],
+    milestoneActivities: d.milestone_activities || [],
+    milestonesAwarded:   d.milestones_awarded   || [],
+    peakAwarded:         d.peak_awarded         || false,
+  };
+}
+
+function memberToDb(m: Member, groupId: string) {
+  return {
+    id:                   m.id,
+    group_id:             groupId,
+    first_name:           m.firstName,
+    last_name:            m.lastName,
+    age:                  m.age,
+    year_joined:          m.yearJoined,
+    attendance:           m.attendance,
+    oas:                  m.oas,
+    sia:                  m.sia,
+    milestone_activities: m.milestoneActivities,
+    milestones_awarded:   m.milestonesAwarded,
+    peak_awarded:         m.peakAwarded,
+  };
+}
+
+export async function loadMembers(_userId: string): Promise<Member[]> {
+  const gid = getLocalGroupId();
+  if (!gid) return [];
+  const { data } = await supabase
+    .from('members')
+    .select('*')
+    .eq('group_id', gid)
+    .order('created_at');
+  return (data || []).map(memberFromDb);
+}
+
+export async function upsertMembers(_userId: string, groupId: string, members: Member[]): Promise<void> {
+  if (!members.length) return;
+  await supabase
+    .from('members')
+    .upsert(members.map(m => memberToDb(m, groupId)), { onConflict: 'id' });
+}
+
+export async function deleteMemberById(_userId: string, memberId: string): Promise<void> {
+  await supabase.from('members').delete().eq('id', memberId);
+}
+
+// ── Run Sheets ────────────────────────────────────────────────────────────────
+
+export interface RunSheetEntry {
+  dbId: string;
+  termRowId: string | null;
+  entry: SavedRunSheet;
+}
+
+export async function loadRunSheets(_userId: string): Promise<RunSheetEntry[]> {
+  const gid = getLocalGroupId();
+  if (!gid) return [];
+  const { data } = await supabase
+    .from('run_sheets')
+    .select('*')
+    .eq('group_id', gid)
+    .order('created_at', { ascending: false });
+  return (data || []).map(d => ({
+    dbId: d.id,
+    termRowId: d.term_row_id,
+    entry: d.data as SavedRunSheet,
+  }));
+}
+
+export async function loadRunSheetByTermRowId(
+  _userId: string,
+  termRowId: string,
+): Promise<{ dbId: string; entry: SavedRunSheet } | null> {
+  const gid = getLocalGroupId();
+  if (!gid) return null;
+  const { data } = await supabase
+    .from('run_sheets')
+    .select('*')
+    .eq('group_id', gid)
+    .eq('term_row_id', termRowId)
+    .maybeSingle();
+  if (!data) return null;
+  return { dbId: data.id, entry: data.data as SavedRunSheet };
+}
+
+export async function loadRunSheetById(dbId: string): Promise<SavedRunSheet | null> {
+  const { data } = await supabase
+    .from('run_sheets')
+    .select('data')
+    .eq('id', dbId)
+    .maybeSingle();
+  return data ? (data.data as SavedRunSheet) : null;
+}
+
+export async function saveRunSheet(
+  _userId: string,
+  groupId: string,
+  termRowId: string | null,
+  sheet: SavedRunSheet,
+  existingDbId?: string,
+): Promise<string> {
+  if (existingDbId) {
+    await supabase.from('run_sheets').update({ data: sheet }).eq('id', existingDbId);
+    return existingDbId;
+  }
+  const { data, error } = await supabase
+    .from('run_sheets')
+    .insert({ group_id: groupId, term_row_id: termRowId, data: sheet })
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`Failed to save run sheet: ${error.message}`);
+  if (!data) throw new Error('Run sheet not returned after insert');
+  return data.id;
+}

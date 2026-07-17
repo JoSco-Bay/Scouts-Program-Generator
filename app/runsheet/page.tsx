@@ -1,121 +1,136 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-
-const SECTION_COLOURS: Record<string,{accent:string;pale:string;text:string}> = {
-  Joeys:     { accent:'#C17F24', pale:'rgba(193,127,36,0.07)', text:'#fff' },
-  Cubs:      { accent:'#E8B800', pale:'rgba(232,184,0,0.08)',  text:'#3d2800' },
-  Scouts:    { accent:'#6BBF5A', pale:'rgba(107,191,90,0.08)', text:'#fff' },
-  Venturers: { accent:'#B5485E', pale:'rgba(181,72,94,0.07)',  text:'#fff' },
-};
-const NAVY = '#2C3E6B';
+import { SECTION_COLOURS, NAVY } from "@/lib/colours";
+import type { GroupConfig, TermRow, ActivityRow, RunSheetData, SavedRunSheet } from "@/lib/types";
+import {
+  loadGroupRecord, loadRunSheetById, loadRunSheetByTermRowId, saveRunSheet,
+} from "@/lib/db";
 
 const CHALLENGE_ICONS: Record<string,string> = {
   Community: '🤝', Outdoor: '🌿', Creative: '🎨', Personal: '⭐',
 };
 
-interface GroupConfig { groupName:string; section:string; meetingDay:string; meetingTime:string; leaders:string[]; members:string[]; }
-interface TermRow { id:string; date:string; time:string; topic:string; location:string; oasFocus:string; bring:string; leader:string; assistantPatrol:string; consentRequired:boolean; rowType:'session'|'extra'; }
-interface ActivityRow { id:string; time:string; name:string; detail:string; optional?:boolean; oasTag?:string|null; hasRecipe?:boolean; }
-interface RunSheetData {
-  tagline?: string;
-  challengeAreas?: string[];
-  plan?: string[];
-  activities: ActivityRow[];
-  review?: string[];
-  participate?: string[];
-  assist?: string[];
-  lead?: string[];
-  itemsRequired?: string[];
+interface RunSheetSource {
+  row: TermRow;
+  config: GroupConfig;
+  isTermRow?: boolean;
+  runSheetDbId?: string;
 }
-interface SavedRunSheet { data: RunSheetData; row: TermRow; config: GroupConfig; }
 
 function genId(){ return Math.random().toString(36).slice(2,9); }
 
 export default function RunSheetPage() {
   const router = useRouter();
-  const [config, setConfig] = useState<GroupConfig|null>(null);
-  const [source, setSource] = useState<{row:TermRow; config:GroupConfig}|null>(null);
-  const [data, setData] = useState<RunSheetData|null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [generated, setGenerated] = useState(false);
-  const [genError, setGenError] = useState('');
-  const [editingId, setEditingId] = useState<string|null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<ActivityRow>>({});
+  const [groupId, setGroupId]         = useState<string | null>(null);
+  const [dbLoading, setDbLoading]     = useState(true);
+  const [runSheetDbId, setRunSheetDbId] = useState<string | null>(null);
+  const [config, setConfig]           = useState<GroupConfig|null>(null);
+  const [source, setSource]           = useState<RunSheetSource|null>(null);
+  const [data, setData]               = useState<RunSheetData|null>(null);
+  const [generating, setGenerating]   = useState(false);
+  const [generated, setGenerated]     = useState(false);
+  const [genError, setGenError]       = useState('');
+  const [editingId, setEditingId]     = useState<string|null>(null);
+  const [editDraft, setEditDraft]     = useState<Partial<ActivityRow>>({});
 
-  // Quick-create form
-  const [quickTopic, setQuickTopic] = useState('');
-  const [quickDate, setQuickDate] = useState('');
-  const [quickTime, setQuickTime] = useState('6:00pm');
+  const [quickTopic, setQuickTopic]       = useState('');
+  const [quickDate, setQuickDate]         = useState('');
+  const [quickTime, setQuickTime]         = useState('6:00pm');
   const [quickLocation, setQuickLocation] = useState('Hall');
-  const [quickOas, setQuickOas] = useState('');
+  const [quickOas, setQuickOas]           = useState('');
+
+  const saveScheduled = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(()=>{
-    const cfg = localStorage.getItem('scoutGroupConfig');
-    if(cfg) setConfig(JSON.parse(cfg));
-    const src = localStorage.getItem('runSheetSource');
-    if(src){
-      const parsed = JSON.parse(src);
-      setSource(parsed);
-      setConfig(parsed.config);
-      if(parsed.row?.id){
-        const saved = localStorage.getItem('runsheets');
-        if(saved){
-          const all: Record<string,SavedRunSheet> = JSON.parse(saved);
-          if(all[parsed.row.id]){
-            setData(all[parsed.row.id].data);
-            setGenerated(true);
+    async function load() {
+      // Load group config from Supabase (keyed by groupId in localStorage)
+      const grp = await loadGroupRecord('');
+      if (grp) { setGroupId(grp.id); setConfig(grp.config); }
+
+      const raw = localStorage.getItem('runSheetSource');
+      if (raw) {
+        try {
+          const parsed: RunSheetSource = JSON.parse(raw);
+          setSource(parsed);
+          if (parsed.config) setConfig(parsed.config);
+
+          // Case 1: navigated here from /runsheets (has a known dbId)
+          if (parsed.runSheetDbId) {
+            const sheet = await loadRunSheetById(parsed.runSheetDbId);
+            if (sheet) {
+              setData(sheet.data);
+              setGenerated(true);
+              setRunSheetDbId(parsed.runSheetDbId);
+            }
+          // Case 2: navigated here from term plan row — check if a sheet already exists
+          } else if (parsed.row?.id && parsed.isTermRow) {
+            const existing = await loadRunSheetByTermRowId('', parsed.row.id);
+            if (existing) {
+              setData(existing.entry.data);
+              setGenerated(true);
+              setRunSheetDbId(existing.dbId);
+            }
           }
+        } catch (e) {
+          console.error('Failed to parse runSheetSource:', e);
         }
       }
+      setDbLoading(false);
     }
+    load();
   },[]);
 
+  // Debounced auto-save whenever data changes (covers generate and user edits)
   useEffect(()=>{
-    if(!data || !source?.row?.id) return;
-    const saved = localStorage.getItem('runsheets');
-    const all: Record<string,SavedRunSheet> = saved ? JSON.parse(saved) : {};
-    all[source.row.id] = { data, row: source.row, config: source.config };
-    localStorage.setItem('runsheets', JSON.stringify(all));
-  },[data, source]);
+    if (!data || !groupId || !source?.row) return;
+    if (saveScheduled.current) clearTimeout(saveScheduled.current);
+    saveScheduled.current = setTimeout(async () => {
+      const termRowId = source.isTermRow ? (source.row?.id ?? null) : null;
+      const sheet: SavedRunSheet = { data, row: source.row, config: source.config };
+      try {
+        const id = await saveRunSheet('', groupId!, termRowId, sheet, runSheetDbId ?? undefined);
+        setRunSheetDbId(prev => prev ?? id);
+      } catch (e) {
+        console.error('Run sheet save failed:', e);
+      }
+    }, 800);
+    return () => { if (saveScheduled.current) clearTimeout(saveScheduled.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[data]);
 
-  const sc = config ? SECTION_COLOURS[config.section]||SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
+  const sc  = config ? SECTION_COLOURS[config.section]||SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
   const acc = sc.accent;
 
   const generate = async (rowOverride?: TermRow) => {
-    const activeRow = rowOverride || source?.row;
+    const activeRow    = rowOverride || source?.row;
     const activeConfig = source?.config || config;
-    if(!activeRow || !activeConfig) return;
+    if (!activeRow || !activeConfig) return;
     setGenerating(true); setGenError('');
     try {
       const res = await fetch('/api/generate-runsheet',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ row: activeRow, config: activeConfig }),
       });
-      if(!res.ok){ const text=await res.text(); throw new Error(`API error ${res.status}: ${text.slice(0,200)}`); }
+      if (!res.ok){ const text=await res.text(); throw new Error(`API error ${res.status}: ${text.slice(0,200)}`); }
       const json = await res.json();
-      if(json.error) throw new Error(json.error);
-      if(!json.activities || !Array.isArray(json.activities)) throw new Error('No activities returned from AI');
-      setSource({row: activeRow, config: activeConfig});
+      if (json.error) throw new Error(json.error);
+      if (!json.activities || !Array.isArray(json.activities)) throw new Error('No activities returned from AI');
+      const updatedSource: RunSheetSource = { row: activeRow, config: activeConfig, isTermRow: source?.isTermRow };
+      setSource(updatedSource);
       setData(json);
       setGenerated(true);
-      if(activeRow.id){
-        const saved = localStorage.getItem('runsheets');
-        const all: Record<string,SavedRunSheet> = saved ? JSON.parse(saved) : {};
-        all[activeRow.id] = { data: json, row: activeRow, config: activeConfig };
-        localStorage.setItem('runsheets', JSON.stringify(all));
-      }
-    } catch(err:any){
-      setGenError(err.message || 'Something went wrong generating the run sheet. Please try again.');
+    } catch(err: unknown){
+      setGenError((err as Error).message || 'Something went wrong generating the run sheet. Please try again.');
     } finally { setGenerating(false); }
   };
 
   const generateQuick = () => {
-    if(!config) return;
+    if (!config) return;
     const quickRow: TermRow = {
       id: genId(), date: quickDate || new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}),
       time: quickTime, topic: quickTopic||'Scout meeting', location: quickLocation,
-      oasFocus: quickOas, bring:'', leader: config.leaders[0]||'', assistantPatrol:'',
+      oasFocus: quickOas, sessionNotes: '', bring:'', leader: config.leaders[0]||'', assistantPatrol:'',
       consentRequired:false, rowType:'session',
     };
     generate(quickRow);
@@ -123,22 +138,22 @@ export default function RunSheetPage() {
 
   const startEdit = (a: ActivityRow) => { setEditingId(a.id); setEditDraft({...a}); };
   const saveEdit = () => {
-    if(!data) return;
+    if (!data) return;
     setData(d => d ? {...d, activities: d.activities.map(a=>a.id===editingId?{...a,...editDraft} as ActivityRow:a)} : d);
     setEditingId(null);
   };
   const deleteActivity = (id:string) => {
-    if(!data) return;
-    if(confirm('Remove this activity?')) setData(d=>d?{...d,activities:d.activities.filter(a=>a.id!==id)}:d);
+    if (!data) return;
+    if (confirm('Remove this activity?')) setData(d=>d?{...d,activities:d.activities.filter(a=>a.id!==id)}:d);
   };
   const addActivity = (optional=false) => {
-    if(!data) return;
+    if (!data) return;
     const newA: ActivityRow = {id:genId(), time:'', name: optional?'Optional game':'New activity', detail:'', optional};
     setData(d=>d?{...d,activities:[...d.activities,newA]}:d);
     setEditingId(newA.id); setEditDraft({...newA});
   };
 
-  const row = source?.row;
+  const row         = source?.row;
   const groupConfig = source?.config || config;
 
   const downloadRunSheet = () => {
@@ -147,45 +162,41 @@ export default function RunSheetPage() {
       type: 'scout-program-builder-run-sheet',
       version: 1,
       savedAt: new Date().toISOString(),
-      row,
-      config: groupConfig,
-      data,
+      row, config: groupConfig, data,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const safeName = (row.topic || 'run-sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    a.href = url;
-    a.download = `${safeName}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = `${safeName}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  // Editable list sections (plan, review, participate, assist, lead, itemsRequired)
   const updateListItem = (key: keyof RunSheetData, idx: number, value: string) => {
-    if(!data) return;
+    if (!data) return;
     setData(d=>{
-      if(!d) return d;
+      if (!d) return d;
       const list = [...(d[key] as string[] || [])];
       list[idx] = value;
       return {...d, [key]: list};
     });
   };
   const addListItem = (key: keyof RunSheetData) => {
-    if(!data) return;
+    if (!data) return;
     setData(d=>d?{...d,[key]:[...(d[key] as string[]||[]),'']}:d);
   };
   const removeListItem = (key: keyof RunSheetData, idx: number) => {
-    if(!data) return;
+    if (!data) return;
     setData(d=>{
-      if(!d) return d;
+      if (!d) return d;
       const list = [...(d[key] as string[]||[])];
       list.splice(idx,1);
       return {...d, [key]: list};
     });
   };
+
+  if (dbLoading) return null;
 
   return (
     <>
@@ -205,8 +216,6 @@ export default function RunSheetPage() {
         .ph-title{color:#111827;font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-bottom:2px;}
         .ph-sub{color:#6b7280;font-size:12px;}
         .body{max-width:820px;margin:0 auto;padding:20px 24px 60px;}
-
-        /* Generate prompt */
         .gen-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:24px;text-align:center;margin-bottom:16px;}
         .gen-title{font-size:16px;font-weight:600;color:#111;margin-bottom:6px;}
         .gen-desc{font-size:13px;color:#6b7280;margin-bottom:20px;line-height:1.6;}
@@ -221,8 +230,6 @@ export default function RunSheetPage() {
         .qf-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;}
         .qf-field input{border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:13px;color:#111;font-family:inherit;outline:none;}
         .qf-field input:focus{border-color:var(--acc);}
-
-        /* Sheet card */
         .sheet-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;}
         .sheet-head{background:${NAVY};padding:16px 18px;}
         .sheet-title{color:#fff;font-size:19px;font-weight:700;letter-spacing:-0.01em;margin-bottom:3px;}
@@ -231,16 +238,11 @@ export default function RunSheetPage() {
         .sheet-pills{display:flex;gap:5px;flex-wrap:wrap;}
         .pill{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.75);font-size:11px;padding:2px 8px;border-radius:4px;}
         .pill.acc{background:var(--acc);color:#fff;}
-
         .sbar{background:var(--acc);color:#fff;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:6px 18px;}
-
-        /* Challenge areas */
         .ca-row{display:flex;gap:10px;padding:14px 18px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;}
         .ca-chip{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:16px;border:1.5px solid #e5e7eb;font-size:12px;font-weight:500;color:#9ca3af;}
         .ca-chip.on{border-color:var(--acc);background:rgba(193,127,36,0.07);color:#111827;}
         .ca-icon{font-size:15px;}
-
-        /* List sections (plan, review, etc) */
         .list-section{padding:12px 18px;border-bottom:1px solid #f3f4f6;}
         .list-item{display:flex;align-items:flex-start;gap:8px;padding:4px 0;}
         .list-checkbox{width:14px;height:14px;border:1.5px solid #d1d5db;border-radius:3px;flex-shrink:0;margin-top:3px;}
@@ -250,8 +252,6 @@ export default function RunSheetPage() {
         .list-del{background:none;border:none;color:#d1d5db;cursor:pointer;font-size:12px;padding:2px;flex-shrink:0;}
         .list-del:hover{color:#ef4444;}
         .list-add{font-size:11px;color:var(--acc);background:none;border:none;cursor:pointer;font-family:inherit;font-weight:500;margin-top:4px;padding-left:22px;}
-
-        /* PAL grid */
         .pal-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;}
         .pal-col{padding:12px 14px;border-right:1px solid #f3f4f6;}
         .pal-col:last-child{border-right:none;}
@@ -260,8 +260,6 @@ export default function RunSheetPage() {
         .pal-label.a{background:#e8eef8;color:${NAVY};}
         .pal-label.l{background:#fef3e0;color:#92600a;}
         .pal-item{font-size:12px;color:#6b7280;line-height:1.6;padding:3px 0;}
-
-        /* Activity rows */
         .activity{border-bottom:1px solid #f3f4f6;}
         .activity:last-child{border-bottom:none;}
         .activity.editing{border-left:3px solid var(--acc);}
@@ -280,7 +278,6 @@ export default function RunSheetPage() {
         .edit-btn:hover{border-color:var(--acc);color:var(--acc);}
         .del-btn{font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid transparent;background:transparent;color:#d1d5db;cursor:pointer;font-family:inherit;text-align:center;}
         .del-btn:hover{color:#ef4444;border-color:#fca5a5;background:#fef2f2;}
-
         .act-edit{padding:10px 14px 14px;background:rgba(193,127,36,0.03);border-top:1px dashed rgba(193,127,36,0.2);display:none;}
         .activity.editing .act-edit{display:block;}
         .ef-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
@@ -296,14 +293,10 @@ export default function RunSheetPage() {
         .ro-btn{font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;}
         .ro-btn:hover{border-color:var(--acc);color:var(--acc);}
         .ro-btn.pri{background:rgba(193,127,36,0.1);border-color:rgba(193,127,36,0.3);color:var(--acc);}
-
         .add-row{padding:10px 16px;border-top:1px solid #f3f4f6;display:flex;gap:8px;background:#f9fafb;}
         .add-btn{font-size:12px;padding:5px 10px;border-radius:5px;border:1px dashed #d1d5db;background:transparent;color:#6b7280;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
         .add-btn:hover{border-color:var(--acc);color:var(--acc);}
-
-        /* Items required */
         .items-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;}
-
         @media (max-width:640px){
           .pal-grid{grid-template-columns:1fr;}
           .pal-col{border-right:none;border-bottom:1px solid #f3f4f6;}
@@ -311,17 +304,16 @@ export default function RunSheetPage() {
           .items-grid{grid-template-columns:1fr;}
           .qf-grid{grid-template-columns:1fr;}
         }
-
         @media print {
-          .nav, .ph, .gen-card, .add-row, .av-actions, .edit-btn, .del-btn, .act-edit, .list-del, .list-add { display: none !important; }
-          body { background: #fff; }
-          .body { max-width: 100%; padding: 0; }
-          .sheet-card { border: none; }
-          .sheet-head { background: ${NAVY} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .sbar { background: var(--acc) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .pill, .pill.acc, .atag.oas, .ca-chip.on { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .activity, .list-section, .ca-row, .pal-grid { break-inside: avoid; }
-          .list-text-input { border: none !important; }
+          .nav,.ph,.gen-card,.add-row,.av-actions,.edit-btn,.del-btn,.act-edit,.list-del,.list-add{display:none!important;}
+          body{background:#fff;}
+          .body{max-width:100%;padding:0;}
+          .sheet-card{border:none;}
+          .sheet-head{background:${NAVY}!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+          .sbar{background:var(--acc)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+          .pill,.pill.acc,.atag.oas,.ca-chip.on{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+          .activity,.list-section,.ca-row,.pal-grid{break-inside:avoid;}
+          .list-text-input{border:none!important;}
         }
       `}</style>
 
@@ -402,7 +394,6 @@ export default function RunSheetPage() {
               </div>
             </div>
 
-            {/* Challenge Areas */}
             {data.challengeAreas && (
               <div className="ca-row">
                 {['Community','Outdoor','Creative','Personal'].map(area=>(
@@ -413,7 +404,6 @@ export default function RunSheetPage() {
               </div>
             )}
 
-            {/* PLAN */}
             {data.plan && (
               <>
                 <div className="sbar">Plan</div>
@@ -430,7 +420,6 @@ export default function RunSheetPage() {
               </>
             )}
 
-            {/* DO — activities */}
             <div className="sbar">Do — Run Sheet</div>
             {data.activities.map(act=>(
               <div key={act.id} className={`activity ${editingId===act.id?'editing':''}`}>
@@ -477,7 +466,6 @@ export default function RunSheetPage() {
               <button className="add-btn" onClick={()=>addActivity(true)}>+ Add optional game</button>
             </div>
 
-            {/* REVIEW */}
             {data.review && (
               <>
                 <div className="sbar">Review</div>
@@ -494,7 +482,6 @@ export default function RunSheetPage() {
               </>
             )}
 
-            {/* PARTICIPATE / ASSIST / LEAD */}
             {(data.participate || data.assist || data.lead) && (
               <>
                 <div className="sbar">Participate · Assist · Lead</div>
@@ -533,7 +520,6 @@ export default function RunSheetPage() {
               </>
             )}
 
-            {/* ITEMS REQUIRED */}
             {data.itemsRequired && (
               <>
                 <div className="sbar">Items Required</div>

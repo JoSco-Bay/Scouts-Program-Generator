@@ -2,7 +2,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, TermRow } from "@/lib/types";
+import type { GroupConfig, TermRow, Member, SIAEntry, MilestoneActivity } from "@/lib/types";
+
+import {
+  loadGroupRecord, loadTermRows, loadMembers,
+  upsertMembers, deleteMemberById,
+} from "@/lib/db";
 
 const PEAK_AWARDS: Record<string,string> = {
   Joeys:     'Joey Scout Challenge',
@@ -18,12 +23,12 @@ const OAS_STREAMS = [
 ];
 
 const SIA_CATEGORIES = [
-  { id:'adventure', label:'Adventure & Sport',    icon:'🏃' },
-  { id:'arts',      label:'Arts & Literature',    icon:'🎨' },
+  { id:'adventure', label:'Adventure & Sport',       icon:'🏃' },
+  { id:'arts',      label:'Arts & Literature',       icon:'🎨' },
   { id:'world',     label:'Creating a Better World', icon:'🌍' },
-  { id:'environment',label:'Environment',         icon:'🌿' },
-  { id:'growth',    label:'Growth & Development', icon:'⭐' },
-  { id:'stem',      label:'Innovation & STEM',    icon:'🔬' },
+  { id:'environment',label:'Environment',            icon:'🌿' },
+  { id:'growth',    label:'Growth & Development',    icon:'⭐' },
+  { id:'stem',      label:'Innovation & STEM',       icon:'🔬' },
 ];
 
 const MILESTONES = [
@@ -34,36 +39,6 @@ const MILESTONES = [
 
 const CHALLENGE_AREAS = ['Community','Outdoor','Creative','Personal'];
 
-interface SIAEntry {
-  category: string;
-  projectName: string;
-  status: 'planning'|'in-progress'|'complete';
-  notes: string;
-  dateCompleted?: string;
-}
-
-interface MilestoneActivity {
-  sessionId: string;
-  sessionDate: string;
-  challengeArea: string;
-  type: 'assist'|'lead'; // Participate is auto-counted from attendance, not logged here
-  milestone: string;
-}
-
-interface Member {
-  id: string;
-  firstName: string;
-  lastName: string;
-  age: number;
-  yearJoined: number;
-  attendance: Record<string, boolean>;
-  oas: Record<string, number>;
-  sia: SIAEntry[];
-  milestoneActivities: MilestoneActivity[];
-  milestonesAwarded: string[];
-  peakAwarded: boolean;
-}
-
 function genId() { return Math.random().toString(36).slice(2,9); }
 function initials(m: Member) { return `${m.firstName[0]||''}${m.lastName[0]||''}`.toUpperCase(); }
 
@@ -73,17 +48,12 @@ function calcAttendancePct(member: Member, rows: TermRow[]): number {
   return Math.round((sessions.filter(r=>member.attendance[r.id]).length / sessions.length) * 100);
 }
 
-// Participate = attendance (auto from grid). Assist and Lead are manually logged.
 function calcMilestoneProgress(member: Member, milestoneId: string, sessions: TermRow[]) {
   const m = MILESTONES.find(x=>x.id===milestoneId)!;
   const acts = member.milestoneActivities.filter(a=>a.milestone===milestoneId);
-
-  // Participate = sessions attended (from attendance grid)
   const attended = sessions.filter(s=>member.attendance[s.id]).length;
-
   const assistTotal = acts.filter(a=>a.type==='assist').length;
   const leadTotal   = acts.filter(a=>a.type==='lead').length;
-
   return {
     participate:       Math.min(attended, m.participateTarget),
     participateTarget: m.participateTarget,
@@ -102,22 +72,34 @@ function avatarColour(idx: number, acc: string): string {
 
 export default function MembersPage() {
   const router = useRouter();
-  const [config, setConfig] = useState<GroupConfig|null>(null);
-  const [rows, setRows] = useState<TermRow[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [view, setView] = useState<'list'|'attendance'|'profile'>('list');
-  const [selectedId, setSelectedId] = useState<string|null>(null);
+
+  const [groupId, setGroupId]     = useState<string | null>(null);
+  const [dbLoading, setDbLoading] = useState(true);
+  const [config, setConfig]       = useState<GroupConfig|null>(null);
+  const [rows, setRows]           = useState<TermRow[]>([]);
+  const [members, setMembers]     = useState<Member[]>([]);
+  const [view, setView]           = useState<'list'|'attendance'|'profile'>('list');
+  const [selectedId, setSelectedId]   = useState<string|null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft] = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
-  const [addSIA, setAddSIA] = useState({category:'adventure',projectName:'',status:'planning',notes:''});
+  const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
+  const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
   const [addMilAct, setAddMilAct] = useState({sessionId:'',challengeArea:'Community',type:'assist',milestone:'m1'});
   const [showMilForm, setShowMilForm] = useState(false);
 
   useEffect(()=>{
-    const c = localStorage.getItem('groupConfig'); if (c) setConfig(JSON.parse(c));
-    const t = localStorage.getItem('programRows');  if (t) setRows(JSON.parse(t));
-    const m = localStorage.getItem('members');       if (m) setMembers(JSON.parse(m));
+    async function load() {
+      const [grp, termRows, memberData] = await Promise.all([
+        loadGroupRecord(""),
+        loadTermRows(""),
+        loadMembers(""),
+      ]);
+      if (grp) { setGroupId(grp.id); setConfig(grp.config); }
+      setRows(termRows);
+      setMembers(memberData);
+      setDbLoading(false);
+    }
+    load();
   },[]);
 
   const acc     = config ? SECTION_COLOURS[config.section]?.accent||'#C17F24' : '#C17F24';
@@ -126,7 +108,12 @@ export default function MembersPage() {
   const peakAward  = PEAK_AWARDS[section]||'Peak Award';
   const sessions   = rows.filter(r=>r.rowType==='session');
 
-  const saveMembers = (m: Member[]) => { setMembers(m); localStorage.setItem('members', JSON.stringify(m)); };
+  const saveMembers = async (m: Member[]) => {
+    setMembers(m);
+    if (!groupId) return;
+    try { await upsertMembers("", groupId, m); }
+    catch (e) { console.error('Members save failed:', e); }
+  };
 
   const addMember = () => {
     if (!addDraft.firstName.trim()) return;
@@ -143,9 +130,14 @@ export default function MembersPage() {
     setShowAddForm(false);
   };
 
-  const deleteMember = (id: string) => {
-    if (confirm('Remove this member?')) saveMembers(members.filter(m=>m.id!==id));
-    if (selectedId===id) { setView('list'); setSelectedId(null); }
+  const deleteMember = async (id: string) => {
+    if (!confirm('Remove this member?')) return;
+    setMembers(m => m.filter(x => x.id !== id));
+    if (selectedId === id) { setView('list'); setSelectedId(null); }
+    if (true) {
+      try { await deleteMemberById("", id); }
+      catch (e) { console.error('Member delete failed:', e); }
+    }
   };
 
   const toggleAttendance = (memberId: string, sessionId: string) => {
@@ -166,7 +158,7 @@ export default function MembersPage() {
     const entry: SIAEntry = {
       category:      addSIA.category,
       projectName:   addSIA.projectName.trim(),
-      status:        addSIA.status as any,
+      status:        addSIA.status as 'planning'|'in-progress'|'complete',
       notes:         addSIA.notes,
       dateCompleted: addSIA.status==='complete' ? new Date().toLocaleDateString('en-AU') : undefined,
     };
@@ -178,7 +170,7 @@ export default function MembersPage() {
   const updateSIAStatus = (memberId: string, siaIdx: number, status: string) => {
     saveMembers(members.map(m=>{
       if (m.id!==memberId) return m;
-      const sia = m.sia.map((s,i)=>i!==siaIdx?s:{...s,status:status as any,dateCompleted:status==='complete'?new Date().toLocaleDateString('en-AU'):s.dateCompleted});
+      const sia = m.sia.map((s,i)=>i!==siaIdx?s:{...s,status:status as 'planning'|'in-progress'|'complete',dateCompleted:status==='complete'?new Date().toLocaleDateString('en-AU'):s.dateCompleted});
       return {...m,sia};
     }));
   };
@@ -194,8 +186,8 @@ export default function MembersPage() {
       sessionId:     addMilAct.sessionId,
       sessionDate:   session?.date||'',
       challengeArea: addMilAct.challengeArea,
-      type:          addMilAct.type as any,
-      milestone:     addMilAct.milestone,  // FIX: store which milestone this belongs to
+      type:          addMilAct.type as 'assist'|'lead',
+      milestone:     addMilAct.milestone,
     };
     saveMembers(members.map(m=>m.id!==memberId?m:{...m,milestoneActivities:[...m.milestoneActivities,entry]}));
     setShowMilForm(false);
@@ -218,8 +210,7 @@ export default function MembersPage() {
   const totalOAS = members.reduce((s,m)=>s+Object.values(m.oas).filter(v=>v>0).length,0);
   const totalSIA = members.reduce((s,m)=>s+m.sia.filter(x=>x.status==='complete').length,0);
 
-  // Next milestone to work toward (first un-awarded one)
-  const nextMilestone = (m: Member) => MILESTONES.find(mil=>!m.milestonesAwarded.includes(mil.id))?.id || 'm3';
+  if (dbLoading) return null;
 
   return (
     <>
@@ -241,25 +232,17 @@ export default function MembersPage() {
         .tab{padding:9px 18px;font-size:12px;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;font-weight:500;}
         .tab.on{color:#111827;border-bottom-color:${acc};}
         .body{max-width:1040px;margin:0 auto;padding:20px 24px 60px;}
-
-        /* Stats */
         .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
         .stat{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;}
         .stat-val{font-size:26px;font-weight:700;color:#111827;line-height:1;}
         .stat-label{font-size:11px;color:#6b7280;margin-top:4px;}
         .stat-sub{font-size:10px;color:#9ca3af;margin-top:2px;}
-
-        /* Sub-tabs */
         .sub-tabs{display:flex;gap:6px;margin-bottom:14px;}
         .sub-tab{font-size:12px;padding:6px 14px;border-radius:20px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;font-weight:500;transition:all 0.15s;}
         .sub-tab.on{background:${acc};border-color:${acc};color:#fff;}
-
-        /* Cards */
         .card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;margin-bottom:14px;}
         .card-head{padding:12px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between;}
         .card-title{font-size:13px;font-weight:600;color:#111827;}
-
-        /* Buttons — FIX: these were missing causing crashes */
         .btn-pri{font-size:12px;padding:6px 13px;border-radius:6px;border:1px solid ${acc};background:${acc};color:#fff;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
         .btn-pri:hover{opacity:0.9;}
         .btn-sec{font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;}
@@ -268,8 +251,6 @@ export default function MembersPage() {
         .btn-sm:hover{border-color:${acc};color:${acc};}
         .btn-danger{font-size:11px;padding:3px 7px;border-radius:4px;border:1px solid #fca5a5;background:#fff;color:#ef4444;cursor:pointer;font-family:inherit;}
         .btn-danger:hover{background:#fef2f2;}
-
-        /* Member list */
         .member-row{display:grid;grid-template-columns:40px 1fr 80px 100px 140px 70px 32px;padding:10px 14px;gap:8px;align-items:center;border-bottom:1px solid #f3f4f6;}
         .member-row:last-child{border-bottom:none;}
         .member-row:hover{background:#fafaf8;}
@@ -287,16 +268,12 @@ export default function MembersPage() {
         .sia-count{font-size:12px;color:#6b7280;}
         .view-btn{font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
         .view-btn:hover{background:${pale};}
-
-        /* Add member form */
         .add-form{background:#f9fafb;border-top:1px solid #f3f4f6;padding:14px 16px;}
         .add-grid{display:grid;grid-template-columns:1fr 1fr 80px 100px;gap:8px;margin-bottom:10px;}
         .af-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-bottom:3px;}
         .af-input{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 9px;font-size:12.5px;color:#111827;font-family:inherit;outline:none;}
         .af-input:focus{border-color:${acc};}
         .af-actions{display:flex;gap:6px;}
-
-        /* Attendance grid */
         .att-wrap{overflow-x:auto;}
         .att-table{border-collapse:collapse;font-size:12px;min-width:600px;width:100%;}
         .att-table th{padding:7px 10px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#fff;background:${acc};white-space:nowrap;}
@@ -309,8 +286,6 @@ export default function MembersPage() {
         .check-box:hover{border-color:${acc};}
         .att-total{font-weight:600;font-size:12px;}
         .m-name-cell{font-weight:500;color:#111827;white-space:nowrap;}
-
-        /* Profile view */
         .profile-head{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:14px;display:flex;align-items:center;gap:16px;}
         .profile-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:700;flex-shrink:0;}
         .profile-name{font-size:18px;font-weight:700;color:#111827;letter-spacing:-0.01em;}
@@ -319,8 +294,6 @@ export default function MembersPage() {
         .ps-item{font-size:12px;color:#6b7280;}
         .ps-val{font-weight:600;color:#111827;}
         .back-link{font-size:12px;color:${acc};cursor:pointer;background:none;border:none;font-family:inherit;display:flex;align-items:center;gap:4px;margin-bottom:12px;padding:0;}
-
-        /* OAS tracker */
         .oas-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px;}
         .oas-stream{border:1px solid #e5e7eb;border-radius:8px;padding:11px 13px;}
         .oas-stream-name{font-size:12px;font-weight:600;color:#111827;margin-bottom:7px;}
@@ -328,8 +301,6 @@ export default function MembersPage() {
         .stage-btn{width:26px;height:26px;border-radius:5px;border:1.5px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#9ca3af;cursor:pointer;transition:all 0.15s;background:#fff;}
         .stage-btn:hover{border-color:${acc};color:${acc};}
         .stage-btn.earned{background:${acc};border-color:${acc};color:#fff;}
-
-        /* SIA */
         .sia-list{padding:10px 14px;}
         .sia-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #f3f4f6;}
         .sia-item:last-child{border-bottom:none;}
@@ -346,8 +317,6 @@ export default function MembersPage() {
         .sia-form{background:#f9fafb;border-top:1px solid #f3f4f6;padding:12px 14px;}
         .sia-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
         select.af-input{cursor:pointer;}
-
-        /* Milestone */
         .milestone-list{padding:12px 14px;}
         .milestone-item{border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin-bottom:10px;}
         .milestone-item:last-child{margin-bottom:0;}
@@ -378,13 +347,10 @@ export default function MembersPage() {
         .peak-check.pending{border-color:#d1d5db;color:transparent;}
         .mil-form{background:#f9fafb;border-top:1px solid #f3f4f6;padding:10px 14px;}
         .mil-form-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;}
-
-        /* Empty states */
         .empty{text-align:center;padding:32px;color:#9ca3af;}
         .empty-icon{font-size:28px;margin-bottom:8px;}
         .empty-title{font-size:14px;font-weight:500;color:#374151;margin-bottom:4px;}
         .empty-desc{font-size:12px;}
-
         @media(max-width:640px){
           .stats{grid-template-columns:repeat(2,1fr);}
           .member-row,.member-header{grid-template-columns:34px 1fr 70px auto;}
@@ -415,7 +381,7 @@ export default function MembersPage() {
         <div className="ph-sub">{config?.groupName} · {section}</div>
         <div className="tabs">
           <div className="tab" onClick={()=>router.push('/term')}>Term plan</div>
-          <div className="tab" onClick={()=>router.push('/term')}>Run sheets</div>
+          <div className="tab" onClick={()=>router.push('/runsheets')}>Run sheets</div>
           <div className="tab on">Members</div>
         </div>
       </div>
@@ -435,7 +401,6 @@ export default function MembersPage() {
           </div>
         )}
 
-        {/* ── MEMBER LIST ── */}
         {view === 'list' && (
           <div className="card">
             <div className="card-head">
@@ -515,7 +480,6 @@ export default function MembersPage() {
           </div>
         )}
 
-        {/* ── ATTENDANCE GRID ── */}
         {view === 'attendance' && (
           <div className="card">
             <div className="card-head">
@@ -577,7 +541,6 @@ export default function MembersPage() {
           </div>
         )}
 
-        {/* ── PROFILE VIEW ── */}
         {view === 'profile' && selected && (
           <>
             <button className="back-link" onClick={()=>{setView('list');setSelectedId(null);}}>← Back to members</button>
@@ -600,7 +563,6 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* OAS Tracker */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title">OAS — Outdoor Adventure Skills</div>
@@ -623,7 +585,6 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* SIA Log */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title">SIA — Special Interest Areas</div>
@@ -690,7 +651,6 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* Milestone Tracker */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title">Milestones</div>
@@ -700,7 +660,6 @@ export default function MembersPage() {
                 <div className="mil-form">
                   <div className="mil-form-grid">
                     <div>
-                      {/* FIX: milestone selector added so activities are scoped correctly */}
                       <div className="af-label">Milestone</div>
                       <select className="af-input" value={addMilAct.milestone} onChange={e=>setAddMilAct(d=>({...d,milestone:e.target.value}))}>
                         {MILESTONES.map(m=><option key={m.id} value={m.id}>{m.label}</option>)}
@@ -779,7 +738,6 @@ export default function MembersPage() {
                   );
                 })}
 
-                {/* Peak award */}
                 <div className="peak-card">
                   <div className="peak-title">⭐ {peakAward}</div>
                   <div className="peak-req">Complete all three milestones plus the following requirements:</div>

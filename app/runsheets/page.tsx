@@ -2,51 +2,47 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, TermRow, ActivityRow } from "@/lib/types";
-
-interface RunSheetData {
-  tagline?: string;
-  challengeAreas?: string[];
-  plan?: string[];
-  activities: ActivityRow[];
-  review?: string[];
-  participate?: string[];
-  assist?: string[];
-  lead?: string[];
-  itemsRequired?: string[];
-}
-interface SavedRunSheet { data: RunSheetData; row: TermRow; config: GroupConfig; }
+import type { GroupConfig } from "@/lib/types";
+import { loadGroupRecord, loadRunSheets } from "@/lib/db";
+import type { RunSheetEntry } from "@/lib/db";
 
 export default function RunSheetsPage() {
   const router = useRouter();
   const [config, setConfig] = useState<GroupConfig|null>(null);
-  const [sheets, setSheets] = useState<{id:string; entry:SavedRunSheet}[]>([]);
+  const [sheets, setSheets] = useState<RunSheetEntry[]>([]);
+  const [dbLoading, setDbLoading] = useState(true);
 
-  useEffect(()=>{
-    const c = localStorage.getItem('groupConfig');
-    if (c) setConfig(JSON.parse(c));
-    const rs = localStorage.getItem('runsheets');
-    if (rs) {
-      const all: Record<string,SavedRunSheet> = JSON.parse(rs);
-      Object.entries(all).forEach(([id,entry])=>console.log('row.date:', JSON.stringify(entry.row.date)));
+  useEffect(() => {
+    async function load() {
+      const [grp, sheetData] = await Promise.all([
+        loadGroupRecord(''),
+        loadRunSheets(''),
+      ]);
+      if (grp) setConfig(grp.config);
       setSheets(
-        Object.entries(all)
-          .map(([id,entry])=>({id,entry}))
-          .sort((a,b)=>{
-            const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
-            return Date.parse(parts(a.entry.row.date)) - Date.parse(parts(b.entry.row.date));
-          })
+        sheetData.sort((a, b) => {
+          const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
+          return Date.parse(parts(a.entry.row?.date || '')) - Date.parse(parts(b.entry.row?.date || ''));
+        })
       );
+      setDbLoading(false);
     }
-  },[]);
+    load();
+  }, []);
 
   const acc  = config ? SECTION_COLOURS[config.section]?.accent||'#C17F24' : '#C17F24';
   const pale = config ? SECTION_COLOURS[config.section]?.pale||'rgba(193,127,36,0.07)' : 'rgba(193,127,36,0.07)';
 
-  const viewSheet = (entry: SavedRunSheet) => {
-    localStorage.setItem('runSheetSource', JSON.stringify({row:entry.row, config:entry.config}));
+  const viewSheet = (sheet: RunSheetEntry) => {
+    localStorage.setItem('runSheetSource', JSON.stringify({
+      row:          sheet.entry.row,
+      config:       sheet.entry.config,
+      runSheetDbId: sheet.dbId,
+    }));
     router.push('/runsheet');
   };
+
+  if (dbLoading) return null;
 
   return (
     <>
@@ -118,14 +114,14 @@ export default function RunSheetsPage() {
           </div>
         ) : (
           <div className="rs-list">
-            {sheets.map(({id,entry})=>(
-              <div key={id} className="rs-card">
+            {sheets.map(sheet=>(
+              <div key={sheet.dbId} className="rs-card">
                 <div>
-                  <div className="rs-date">{entry.row.date}{entry.row.time?` · ${entry.row.time}`:''}</div>
-                  <div className="rs-topic">{entry.row.topic||'Untitled session'}</div>
-                  {entry.row.oasFocus&&<span className="rs-oas">⚜ {entry.row.oasFocus}</span>}
+                  <div className="rs-date">{sheet.entry.row?.date}{sheet.entry.row?.time?` · ${sheet.entry.row.time}`:''}</div>
+                  <div className="rs-topic">{sheet.entry.row?.topic||'Untitled session'}</div>
+                  {sheet.entry.row?.oasFocus&&<span className="rs-oas">⚜ {sheet.entry.row.oasFocus}</span>}
                 </div>
-                <button className="view-btn" onClick={()=>viewSheet(entry)}>View →</button>
+                <button className="view-btn" onClick={()=>viewSheet(sheet)}>View →</button>
               </div>
             ))}
           </div>
