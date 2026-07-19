@@ -35,10 +35,12 @@ export default function RunSheetsPage() {
       }
       if (grp) setConfig(grp.config);
       setSheets(
-        (sheetData || []).sort((a, b) => {
-          const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
-          return Date.parse(parts(a.entry.row?.date || '')) - Date.parse(parts(b.entry.row?.date || ''));
-        })
+        (sheetData || [])
+          .filter((s) => s && s.entry && s.entry.row)
+          .sort((a, b) => {
+            const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
+            return Date.parse(parts(a.entry?.row?.date || '')) - Date.parse(parts(b.entry?.row?.date || ''));
+          })
       );
       setDbLoading(false);
     }
@@ -50,8 +52,8 @@ export default function RunSheetsPage() {
 
   const viewSheet = (sheet: RunSheetEntry) => {
     localStorage.setItem('runSheetSource', JSON.stringify({
-      row:          sheet.entry.row,
-      config:       sheet.entry.config,
+      row:          sheet.entry?.row,
+      config:       sheet.entry?.config,
       runSheetDbId: sheet.dbId,
     }));
     router.push('/runsheet');
