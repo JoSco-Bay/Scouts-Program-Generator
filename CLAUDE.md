@@ -89,6 +89,7 @@ saveRunSheet(userId, groupId, termRowId, sheet, existingDbId?) → string (dbId)
 | `groupConfig` | `GroupConfig` JSON | `/term` `handleUpload` | Same backup/fallback pattern as `programRows` |
 | `termName` | `string` | `/term` `handleUpload` | Supabase doesn't store termName; localStorage is the only store |
 | `members` | `Member[]` JSON | `lib/db.ts` `loadMembers`/`upsertMembers`/`deleteMemberById` | Read-through cache of the `members` table; written on every successful Supabase read/write, read as fallback when Supabase errors |
+| `runsheets` | `Record<rowId, RunSheetEntry>` JSON | `lib/db.ts` `saveRunSheet`/`loadRunSheets` | **Primary store for run sheets** (temporary, until Supabase auth/save is confirmed reliable in production). Keyed by `SavedRunSheet.row.id`. `saveRunSheet` always writes here even if the Supabase write fails/throws, and never rejects — the Supabase `dbId` is used as the cache's `dbId` when the write succeeds, otherwise `sheet.row.id` is used as a local-only id. `loadRunSheets` returns the cache and only adds Supabase rows for sessions not already cached locally (cache wins on conflict). `/runsheet` checks this cache (via `getCachedRunSheetByRowId`) before falling back to a Supabase lookup. |
 
 ## Supabase schema — current state (as of 2026-06-27)
 

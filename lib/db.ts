@@ -229,19 +229,58 @@ export interface RunSheetEntry {
   entry: SavedRunSheet;
 }
 
+// ── Run sheets localStorage cache (primary store — see CLAUDE.md) ────────────
+// Object keyed by session row ID (SavedRunSheet.row.id), value is a RunSheetEntry.
+
+function getRunSheetsCache(): Record<string, RunSheetEntry> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem('runsheets');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setRunSheetsCache(cache: Record<string, RunSheetEntry>): void {
+  if (typeof window !== 'undefined') localStorage.setItem('runsheets', JSON.stringify(cache));
+}
+
+function cacheRunSheet(rowId: string, entry: RunSheetEntry): void {
+  const cache = getRunSheetsCache();
+  cache[rowId] = entry;
+  setRunSheetsCache(cache);
+}
+
+export function getCachedRunSheetByRowId(rowId: string): RunSheetEntry | null {
+  return getRunSheetsCache()[rowId] ?? null;
+}
+
 export async function loadRunSheets(_userId: string): Promise<RunSheetEntry[]> {
+  const cached = getRunSheetsCache();
   const gid = getLocalGroupId();
-  if (!gid) return [];
-  const { data } = await supabase
-    .from('run_sheets')
-    .select('*')
-    .eq('group_id', gid)
-    .order('created_at', { ascending: false });
-  return (data || []).map(d => ({
-    dbId: d.id,
-    termRowId: d.term_row_id,
-    entry: d.data as SavedRunSheet,
-  }));
+  if (!gid) return Object.values(cached);
+  try {
+    const { data, error } = await supabase
+      .from('run_sheets')
+      .select('*')
+      .eq('group_id', gid)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    // localStorage is the primary source: keep cached entries, only add remote
+    // rows for sessions we don't already have cached locally.
+    const merged = { ...cached };
+    for (const d of data || []) {
+      const entry: RunSheetEntry = { dbId: d.id, termRowId: d.term_row_id, entry: d.data as SavedRunSheet };
+      const rowId = entry.entry.row?.id;
+      if (rowId && !merged[rowId]) merged[rowId] = entry;
+    }
+    setRunSheetsCache(merged);
+    return Object.values(merged);
+  } catch (e) {
+    console.error('Supabase run sheets load failed; using localStorage cache:', e);
+    return Object.values(cached);
+  }
 }
 
 export async function loadRunSheetByTermRowId(
@@ -250,23 +289,35 @@ export async function loadRunSheetByTermRowId(
 ): Promise<{ dbId: string; entry: SavedRunSheet } | null> {
   const gid = getLocalGroupId();
   if (!gid) return null;
-  const { data } = await supabase
-    .from('run_sheets')
-    .select('*')
-    .eq('group_id', gid)
-    .eq('term_row_id', termRowId)
-    .maybeSingle();
-  if (!data) return null;
-  return { dbId: data.id, entry: data.data as SavedRunSheet };
+  try {
+    const { data, error } = await supabase
+      .from('run_sheets')
+      .select('*')
+      .eq('group_id', gid)
+      .eq('term_row_id', termRowId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return { dbId: data.id, entry: data.data as SavedRunSheet };
+  } catch (e) {
+    console.error('Supabase run sheet load failed:', e);
+    return null;
+  }
 }
 
 export async function loadRunSheetById(dbId: string): Promise<SavedRunSheet | null> {
-  const { data } = await supabase
-    .from('run_sheets')
-    .select('data')
-    .eq('id', dbId)
-    .maybeSingle();
-  return data ? (data.data as SavedRunSheet) : null;
+  try {
+    const { data, error } = await supabase
+      .from('run_sheets')
+      .select('data')
+      .eq('id', dbId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? (data.data as SavedRunSheet) : null;
+  } catch (e) {
+    console.error('Supabase run sheet load failed:', e);
+    return null;
+  }
 }
 
 export async function saveRunSheet(
@@ -276,16 +327,27 @@ export async function saveRunSheet(
   sheet: SavedRunSheet,
   existingDbId?: string,
 ): Promise<string> {
-  if (existingDbId) {
-    await supabase.from('run_sheets').update({ data: sheet }).eq('id', existingDbId);
-    return existingDbId;
+  let dbId: string | undefined;
+  try {
+    if (existingDbId) {
+      const { error } = await supabase.from('run_sheets').update({ data: sheet }).eq('id', existingDbId);
+      if (error) throw error;
+      dbId = existingDbId;
+    } else {
+      const { data, error } = await supabase
+        .from('run_sheets')
+        .insert({ group_id: groupId, term_row_id: termRowId, data: sheet })
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      dbId = data?.id;
+    }
+  } catch (e) {
+    console.error('Supabase run sheet save failed; saved to localStorage only:', e);
   }
-  const { data, error } = await supabase
-    .from('run_sheets')
-    .insert({ group_id: groupId, term_row_id: termRowId, data: sheet })
-    .select('id')
-    .maybeSingle();
-  if (error) throw new Error(`Failed to save run sheet: ${error.message}`);
-  if (!data) throw new Error('Run sheet not returned after insert');
-  return data.id;
+  // Always save to localStorage, keyed by session row ID — this is the fallback
+  // of record when Supabase is unreachable (see CLAUDE.md).
+  const cacheId = dbId ?? existingDbId ?? sheet.row.id;
+  cacheRunSheet(sheet.row.id, { dbId: cacheId, termRowId, entry: sheet });
+  return cacheId;
 }

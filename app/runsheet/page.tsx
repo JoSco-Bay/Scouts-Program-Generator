@@ -5,6 +5,7 @@ import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig, TermRow, ActivityRow, RunSheetData, SavedRunSheet } from "@/lib/types";
 import {
   loadGroupRecord, loadRunSheetById, loadRunSheetByTermRowId, saveRunSheet,
+  getCachedRunSheetByRowId,
 } from "@/lib/db";
 
 const CHALLENGE_ICONS: Record<string,string> = {
@@ -55,8 +56,14 @@ export default function RunSheetPage() {
           setSource(parsed);
           if (parsed.config) setConfig(parsed.config);
 
+          // localStorage is the primary source — check it first, keyed by session row ID
+          const cached = parsed.row?.id ? getCachedRunSheetByRowId(parsed.row.id) : null;
+          if (cached) {
+            setData(cached.entry.data);
+            setGenerated(true);
+            setRunSheetDbId(cached.dbId);
           // Case 1: navigated here from /runsheets (has a known dbId)
-          if (parsed.runSheetDbId) {
+          } else if (parsed.runSheetDbId) {
             const sheet = await loadRunSheetById(parsed.runSheetDbId);
             if (sheet) {
               setData(sheet.data);
@@ -81,19 +88,17 @@ export default function RunSheetPage() {
     load();
   },[]);
 
-  // Debounced auto-save whenever data changes (covers generate and user edits)
+  // Debounced auto-save whenever data changes (covers generate and user edits).
+  // saveRunSheet always writes to localStorage even if the Supabase save fails,
+  // so this never needs to treat a save as failed.
   useEffect(()=>{
-    if (!data || !groupId || !source?.row) return;
+    if (!data || !source?.row) return;
     if (saveScheduled.current) clearTimeout(saveScheduled.current);
     saveScheduled.current = setTimeout(async () => {
       const termRowId = source.isTermRow ? (source.row?.id ?? null) : null;
       const sheet: SavedRunSheet = { data, row: source.row, config: source.config };
-      try {
-        const id = await saveRunSheet('', groupId!, termRowId, sheet, runSheetDbId ?? undefined);
-        setRunSheetDbId(prev => prev ?? id);
-      } catch (e) {
-        console.error('Run sheet save failed:', e);
-      }
+      const id = await saveRunSheet('', groupId ?? '', termRowId, sheet, runSheetDbId ?? undefined);
+      setRunSheetDbId(prev => prev ?? id);
     }, 800);
     return () => { if (saveScheduled.current) clearTimeout(saveScheduled.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
