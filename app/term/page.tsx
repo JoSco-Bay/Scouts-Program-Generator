@@ -77,8 +77,7 @@ export default function TermPage() {
   const [termName, setTermName]   = useState('Term 2, 2026');
   const [rows, setRows]           = useState<TermRow[]>([]);
   const [fullMembers, setFullMembers] = useState<Member[]>([]);
-  const [editingId, setEditingId] = useState<string|null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<TermRow>>({});
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set());
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [generating, setGenerating]   = useState(false);
   const [datesSet, setDatesSet]       = useState(false);
@@ -189,8 +188,19 @@ export default function TermPage() {
     return [...arr].sort((a,b)=>dateSortKey(a,yearHint)-dateSortKey(b,yearHint));
   }, [termName]);
 
-  const startEdit = (row: TermRow) => { setEditingId(row.id); setEditDraft({...row}); };
-  const saveEdit  = () => { saveRows(sortByDate(rows.map(r=>r.id===editingId?{...r,...editDraft} as TermRow:r))); setEditingId(null); };
+  const updateCell = (id: string, field: keyof TermRow, value: string|boolean) => {
+    setRows(rs => rs.map(r => r.id===id ? {...r, [field]: value} as TermRow : r));
+  };
+  const commitRow = () => { saveRows(sortByDate(rows)); };
+  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
+  };
+  const toggleConsent = (id: string, checked: boolean) => {
+    saveRows(rows.map(r=>r.id===id?{...r,consentRequired:checked}:r));
+  };
+  const toggleNotes = (id: string) => {
+    setOpenNotes(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
 
   const deleteRow = async (id: string) => {
     if (!confirm('Remove this row?')) return;
@@ -201,7 +211,7 @@ export default function TermPage() {
 
   const addRow = (type: 'session'|'extra') => {
     const nr: TermRow = {id:genId(),date:'',time:type==='session'?fmt12(config?.meetingTime||'18:00'):'',topic:'',location:type==='session'?'Hall':'',oasFocus:'',sessionNotes:'',bring:'',leader:config?.leaders[0]||'',assistantPatrol:'',consentRequired:false,rowType:type};
-    const updated = sortByDate([...rows,nr]); saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
+    const updated = sortByDate([...rows,nr]); saveRows(updated);
   };
 
   const moveRow = (id: string, dir: -1|1) => {
@@ -328,6 +338,7 @@ export default function TermPage() {
   const sessionCount = rows.filter(r=>r.rowType==='session').length;
   const activeCols   = COLUMN_DEFS.filter(c=>visibleCols[c.key]);
   const colSpanTotal = activeCols.length + 1;
+  const allPeople     = [...new Set([...(config?.leaders||[]), ...(config?.members||[]).filter(Boolean), ...memberNames].map(n=>n.trim()))].filter(Boolean);
 
   if (dbLoading) return null;
 
@@ -401,39 +412,36 @@ export default function TermPage() {
         th{padding:8px 9px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#fff;white-space:nowrap;}
         tbody tr.session td{background:${pale};}
         tbody tr.extra td{background:#fff;}
-        tbody tr.editing td{background:rgba(193,127,36,0.05)!important;}
         td{padding:8px 9px;border-bottom:1px solid #f3f4f6;vertical-align:top;line-height:1.45;color:#111827;}
+        .cell-input,.cell-select{width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:#111827;padding:3px 4px;border-radius:4px;outline:none;font-family:inherit;}
+        .cell-input:hover,.cell-select:hover{background:rgba(0,0,0,0.04);}
+        .cell-input:focus,.cell-select:focus{border-color:${acc};background:#fff;}
+        .cell-input::placeholder{color:#c3c8d1;font-style:italic;}
+        .cell-date{font-weight:600;font-size:12px;margin-bottom:1px;}
+        .cell-time{font-size:10px;color:#6b7280;}
+        .cell-consent{display:flex;align-items:center;gap:4px;font-size:10px;color:#92600a;margin-top:2px;padding:0 4px;white-space:nowrap;cursor:pointer;}
+        .cell-consent input{accent-color:${acc};}
+        .oas-cell{display:flex;align-items:center;gap:2px;}
+        .notes-icon{border:none;background:transparent;cursor:pointer;font-size:12px;padding:2px;line-height:1;flex-shrink:0;color:#c3c8d1;opacity:0.7;}
+        .notes-icon:hover{color:${acc};opacity:1;}
+        .notes-icon.has-notes{color:${acc};opacity:1;}
+        .notes-row td{padding:0;border-bottom:1px solid #f3f4f6;background:#fafaf8;}
+        .notes-panel{padding:10px 14px 12px;border-left:3px solid ${acc};}
+        .notes-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-bottom:4px;}
+        .notes-textarea{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 8px;font-size:12px;color:#111827;font-family:inherit;outline:none;resize:vertical;min-height:50px;line-height:1.5;}
+        .notes-textarea:focus{border-color:${acc};}
         tbody tr:hover td{filter:brightness(0.98);}
-        .dm{font-weight:600;font-size:12px;}
-        .dt{font-size:10px;color:#9ca3af;margin-top:1px;}
-        .ctag{display:inline-flex;align-items:center;gap:2px;font-size:10px;background:#fef9ec;color:#92600a;border:1px solid #f0cf80;border-radius:3px;padding:1px 5px;margin-top:3px;}
-        .otag{display:inline-block;font-size:10px;background:#eef1f9;color:${NAVY};border:1px solid #c5cedf;border-radius:3px;padding:1px 5px;}
         .act-col{display:flex;flex-direction:column;gap:3px;}
         .act-row-top{display:flex;gap:3px;}
         .move-btn{font-size:11px;padding:2px 5px;border-radius:4px;border:1px solid #e5e7eb;background:#fff;color:#9ca3af;cursor:pointer;line-height:1;}
         .move-btn:hover{border-color:${acc};color:${acc};}
         .move-btn:disabled{opacity:0.3;cursor:not-allowed;}
-        .edit-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;text-align:center;width:100%;}
-        .edit-btn:hover{border-color:${acc};color:${acc};}
         .create-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;text-align:center;width:100%;font-weight:500;}
         .create-btn:hover{background:${pale};}
         .del-btn{font-size:10px;padding:2px;border:none;background:transparent;color:#d1d5db;cursor:pointer;font-family:inherit;text-align:center;width:100%;}
         .del-btn:hover{color:#ef4444;}
-        .edit-form{padding:12px 14px 14px;background:#fafaf8;border-top:1px dashed #e5e7eb;}
-        .ef3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
-        .ef2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px;}
-        .efl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-bottom:3px;}
-        .efi{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 8px;font-size:12px;color:#111827;font-family:inherit;outline:none;}
-        .efi:focus{border-color:${acc};}
-        .ef-check{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;}
-        .ap-checklist{max-height:120px;overflow-y:auto;border:1px solid #d1d5db;border-radius:5px;padding:4px 6px;background:#fff;}
-        .ap-checklist:focus-within{border-color:${acc};}
-        .ap-check-row{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;padding:2px 0;user-select:none;}
-        .ap-check-row:hover{color:#111827;}
-        .ef-actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;}
         .save-btn{font-size:12px;padding:6px 16px;border-radius:6px;border:none;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;}
         .cancel-btn{font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;}
-        .type-sel{font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid #d1d5db;background:#fff;color:#374151;font-family:inherit;margin-left:auto;}
         .totrow{background:#f9fafb;padding:8px 10px;font-size:11px;color:#6b7280;border-top:1px solid #f3f4f6;}
         .add-row{padding:10px 14px;border-top:1px solid #f3f4f6;display:flex;gap:8px;background:#f9fafb;}
         .add-btn{font-size:12px;padding:5px 10px;border-radius:5px;border:1px dashed #d1d5db;background:transparent;color:#6b7280;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
@@ -467,7 +475,8 @@ export default function TermPage() {
           table{font-size:11px;}
           th{padding:8px 8px;}
           td{padding:10px 8px;line-height:1.6;}
-          .dm{font-size:12px;margin-bottom:2px;}
+          .cell-input,.cell-select{border:none!important;background:transparent!important;padding:0;}
+          .notes-icon,.notes-row{display:none!important;}
           tr.session td,tr.extra td{border-bottom:1px solid #e5e7eb;}
           .term-card,.term-head{break-inside:avoid;}
           tr{break-inside:avoid;}
@@ -632,28 +641,73 @@ export default function TermPage() {
                 <tbody>
                   {rows.map((row,idx)=>(
                     <Fragment key={row.id}>
-                      <tr className={`${row.rowType==='session'?'session':'extra'} ${editingId===row.id?'editing':''}`}>
+                      <tr className={row.rowType==='session'?'session':'extra'}>
                         {activeCols.map(c=>{
-                          if (c.key==='date') return <td key="date"><div className="dm">{row.date}</div><div className="dt">{row.time}</div></td>;
+                          if (c.key==='date') return (
+                            <td key="date">
+                              <input className="cell-input cell-date" value={row.date} placeholder="Date"
+                                onChange={e=>updateCell(row.id,'date',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                              <input className="cell-input cell-time" value={row.time} placeholder="Time"
+                                onChange={e=>updateCell(row.id,'time',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                            </td>
+                          );
                           if (c.key==='topic') return (
                             <td key="topic">
-                              {row.topic||<span style={{color:'#d1d5db',fontStyle:'italic'}}>No topic yet</span>}
-                              {row.consentRequired&&<div><span className="ctag">⚠ Consent</span></div>}
+                              <input className="cell-input" value={row.topic} placeholder="No topic yet"
+                                onChange={e=>updateCell(row.id,'topic',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                              <label className="cell-consent">
+                                <input type="checkbox" checked={row.consentRequired}
+                                  onChange={e=>toggleConsent(row.id,e.target.checked)}/>
+                                Consent
+                              </label>
                             </td>
                           );
                           if (c.key==='focusNotes') return (
                             <td key="focusNotes">
-                              {row.oasFocus&&<div><span className="otag" style={{marginBottom:'3px',display:'inline-block'}}>{row.oasFocus}</span></div>}
-                              {row.sessionNotes
-                                ?<span style={{fontSize:'11px',color:'#6b7280',lineHeight:'1.4',display:'block'}}>{row.sessionNotes.length>60?row.sessionNotes.slice(0,60)+'…':row.sessionNotes}</span>
-                                :(!row.oasFocus&&'—')
-                              }
+                              <div className="oas-cell">
+                                <input className="cell-input" value={row.oasFocus||''} placeholder="OAS focus"
+                                  onChange={e=>updateCell(row.id,'oasFocus',e.target.value)}
+                                  onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                                <button type="button" className={`notes-icon ${row.sessionNotes?'has-notes':''}`}
+                                  onClick={()=>toggleNotes(row.id)} title="Session notes">📝</button>
+                              </div>
                             </td>
                           );
-                          if (c.key==='location') return <td key="location">{row.location||'—'}</td>;
-                          if (c.key==='bring') return <td key="bring">{row.bring||'—'}</td>;
-                          if (c.key==='leader') return <td key="leader">{row.leader||'—'}</td>;
-                          if (c.key==='assistantPatrol') return <td key="assistantPatrol">{row.assistantPatrol||'—'}</td>;
+                          if (c.key==='location') return (
+                            <td key="location">
+                              <input className="cell-input" value={row.location||''} placeholder="—"
+                                onChange={e=>updateCell(row.id,'location',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                            </td>
+                          );
+                          if (c.key==='bring') return (
+                            <td key="bring">
+                              <input className="cell-input" value={row.bring||''} placeholder="—"
+                                onChange={e=>updateCell(row.id,'bring',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                            </td>
+                          );
+                          if (c.key==='leader') return (
+                            <td key="leader">
+                              <select className="cell-select" value={row.leader||''}
+                                onChange={e=>updateCell(row.id,'leader',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}>
+                                <option value="">—</option>
+                                {allPeople.map(n=><option key={n} value={n}>{n}</option>)}
+                              </select>
+                            </td>
+                          );
+                          if (c.key==='assistantPatrol') return (
+                            <td key="assistantPatrol">
+                              <input className="cell-input" list={`ap-list-${row.id}`} value={row.assistantPatrol||''} placeholder="—"
+                                onChange={e=>updateCell(row.id,'assistantPatrol',e.target.value)}
+                                onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
+                              <datalist id={`ap-list-${row.id}`}>{allPeople.map(n=><option key={n} value={n}/>)}</datalist>
+                            </td>
+                          );
                           return <td key={c.key}>—</td>;
                         })}
                         <td>
@@ -662,85 +716,20 @@ export default function TermPage() {
                               <button className="move-btn" onClick={()=>moveRow(row.id,-1)} disabled={idx===0}>↑</button>
                               <button className="move-btn" onClick={()=>moveRow(row.id,1)} disabled={idx===rows.length-1}>↓</button>
                             </div>
-                            <button className="edit-btn" onClick={()=>editingId===row.id?setEditingId(null):startEdit(row)}>✏ Edit</button>
                             <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
                             <button className="del-btn" onClick={()=>deleteRow(row.id)}>🗑 delete</button>
                           </div>
                         </td>
                       </tr>
-                      {editingId===row.id&&(
-                        <tr key={`${row.id}-edit`}>
-                          <td colSpan={colSpanTotal} style={{padding:0,borderLeft:`3px solid ${acc}`}}>
-                            <div className="edit-form">
-                              <div className="ef3">
-                                <div><div className="efl">Date</div><input className="efi" value={editDraft.date||''} onChange={e=>setEditDraft(d=>({...d,date:e.target.value}))} placeholder="e.g. Wed 22 Apr"/></div>
-                                <div><div className="efl">Time</div><input className="efi" value={editDraft.time||''} onChange={e=>setEditDraft(d=>({...d,time:e.target.value}))} placeholder="e.g. 6:00pm"/></div>
-                                <div><div className="efl">Location</div><input className="efi" value={editDraft.location||''} onChange={e=>setEditDraft(d=>({...d,location:e.target.value}))}/></div>
-                              </div>
-                              <div className="ef3">
-                                <div><div className="efl">Topic / theme</div><input className="efi" value={editDraft.topic||''} onChange={e=>setEditDraft(d=>({...d,topic:e.target.value}))}/></div>
-                                <div><div className="efl">OAS focus</div><input className="efi" value={editDraft.oasFocus||''} onChange={e=>setEditDraft(d=>({...d,oasFocus:e.target.value}))} placeholder="e.g. Bushcraft S1"/></div>
-                                <div><div className="efl">Bring</div><input className="efi" value={editDraft.bring||''} onChange={e=>setEditDraft(d=>({...d,bring:e.target.value}))}/></div>
-                              </div>
-                              <div style={{marginBottom:'8px'}}>
-                                <div className="efl" style={{marginBottom:'3px'}}>Session notes <span style={{fontSize:'10px',color:'#9ca3af',fontWeight:'400',textTransform:'none',letterSpacing:0}}>— what to include, context for AI run sheet generation</span></div>
-                                <textarea className="efi" style={{resize:'vertical',minHeight:'68px',lineHeight:'1.55',width:'100%'}}
-                                  value={editDraft.sessionNotes||''}
-                                  onChange={e=>setEditDraft(d=>({...d,sessionNotes:e.target.value}))}
-                                  placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple."/>
-                              </div>
-                              <div className="ef2">
-                                {(()=>{
-                                  const cfgLeaders = config?.leaders||[];
-                                  const cfgMembers = (config?.members||[]).filter(Boolean);
-                                  const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames].map(n=>n.trim()))].filter(Boolean);
-                                  const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
-                                  return (<>
-                                    <div><div className="efl">Leader</div>
-                                      <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}>
-                                        <option value="">— select —</option>
-                                        {allPeople.map(n=><option key={n} value={n}>{n}</option>)}
-                                      </select>
-                                    </div>
-                                    <div><div className="efl">Asst. patrol leader</div>
-                                      <div className="ap-checklist">
-                                        {allPeople.length===0
-                                          ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
-                                          : allPeople.map(name=>(
-                                              <label key={name} className="ap-check-row">
-                                                <input type="checkbox"
-                                                  checked={selected.includes(name)}
-                                                  style={{accentColor:acc}}
-                                                  onChange={e=>{
-                                                    const ticked = e.target.checked;
-                                                    setEditDraft(d=>{
-                                                      const parts = (d.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
-                                                      const next = ticked ? [...new Set([...parts,name])] : parts.filter(p=>p!==name);
-                                                      return {...d,assistantPatrol:next.join(', ')};
-                                                    });
-                                                  }}
-                                                />
-                                                {name}
-                                              </label>
-                                            ))
-                                        }
-                                      </div>
-                                    </div>
-                                  </>);
-                                })()}
-                              </div>
-                              <div className="ef-actions">
-                                <button className="save-btn" style={{background:acc}} onClick={saveEdit}>Save</button>
-                                <button className="cancel-btn" onClick={()=>setEditingId(null)}>Cancel</button>
-                                <label className="ef-check" style={{marginLeft:'8px'}}>
-                                  <input type="checkbox" style={{accentColor:acc}} checked={editDraft.consentRequired||false} onChange={e=>setEditDraft(d=>({...d,consentRequired:e.target.checked}))}/>
-                                  Consent required
-                                </label>
-                                <select className="type-sel" value={editDraft.rowType||'session'} onChange={e=>setEditDraft(d=>({...d,rowType:e.target.value as 'session'|'extra'}))}>
-                                  <option value="session">Weekly session</option>
-                                  <option value="extra">Extra event</option>
-                                </select>
-                              </div>
+                      {openNotes.has(row.id)&&(
+                        <tr key={`${row.id}-notes`} className="notes-row">
+                          <td colSpan={colSpanTotal}>
+                            <div className="notes-panel">
+                              <div className="notes-label">Session notes — what to include, context for AI run sheet generation</div>
+                              <textarea className="notes-textarea" value={row.sessionNotes||''}
+                                onChange={e=>updateCell(row.id,'sessionNotes',e.target.value)}
+                                onBlur={commitRow}
+                                placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple."/>
                             </div>
                           </td>
                         </tr>
