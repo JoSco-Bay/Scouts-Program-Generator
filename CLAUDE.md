@@ -106,6 +106,12 @@ Auth is deferred to Phase 5. Current approach:
 - `lib/supabase.ts` uses plain `createClient` from `@supabase/supabase-js` — no `@supabase/ssr`, no auth options.
 - Do NOT re-introduce `supabase.auth.getUser()` calls in `lib/db.ts` until Phase 5.
 
+## Supabase failure handling (all `lib/db.ts` functions)
+
+- Every exported function in `lib/db.ts` wraps its Supabase calls in try/catch — if the client is unreachable (or `supabase` itself is `null`, e.g. missing `NEXT_PUBLIC_SUPABASE_*` env vars), reads return a safe empty default (`null`/`[]`) instead of throwing, and writes log the error instead of throwing (except `saveGroupConfig`, which still throws a clean `Error` since its callers already catch it and need to know the save failed).
+- This matters because several pages (`/term`, `/members`, `/runsheets`) call multiple `lib/db.ts` loaders via `Promise.all` in their initial-load `useEffect`, with no try/catch of their own and `setDbLoading(false)` only reached after the `Promise.all` resolves. An unguarded throw from any one of those calls leaves `dbLoading` stuck `true` forever — the page renders `null` forever (a white screen), not a visible error. Any new `lib/db.ts` function follows this same guard pattern so it's safe to add to those `Promise.all` calls.
+- `members` and `runsheets` also have a real localStorage cache (see the localStorage table above) that these guards fall back to; `groups`/`term_rows` currently just fall back to an empty result — `/term` and `/setup` separately maintain their own `groupConfig`/`programRows` localStorage backups and read them when the Supabase result comes back empty.
+
 ## Auth pattern — every page
 
 ```typescript

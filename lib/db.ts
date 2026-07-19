@@ -61,21 +61,25 @@ export async function saveGroupConfig(
     members:      config.members,
     updated_at:   new Date().toISOString(),
   };
-  const gid = groupId || getLocalGroupId();
-  if (gid) {
-    const { error } = await supabase.from('groups').update(payload).eq('id', gid);
-    if (error) throw new Error(`Failed to update group: ${error.message}`);
-    return gid;
+  try {
+    const gid = groupId || getLocalGroupId();
+    if (gid) {
+      const { error } = await supabase.from('groups').update(payload).eq('id', gid);
+      if (error) throw new Error(`Failed to update group: ${error.message}`);
+      return gid;
+    }
+    const { data, error } = await supabase
+      .from('groups')
+      .insert(payload)
+      .select('id')
+      .maybeSingle();
+    if (error) throw new Error(`Failed to insert group: ${error.message}`);
+    if (!data) throw new Error('Group record not returned after insert');
+    setLocalGroupId(data.id);
+    return data.id;
+  } catch (e) {
+    throw e instanceof Error ? e : new Error('Failed to save group config');
   }
-  const { data, error } = await supabase
-    .from('groups')
-    .insert(payload)
-    .select('id')
-    .maybeSingle();
-  if (error) throw new Error(`Failed to insert group: ${error.message}`);
-  if (!data) throw new Error('Group record not returned after insert');
-  setLocalGroupId(data.id);
-  return data.id;
 }
 
 // ── Term Rows ─────────────────────────────────────────────────────────────────
@@ -120,30 +124,52 @@ function rowToDb(r: TermRow, groupId: string, sortOrder: number) {
 export async function loadTermRows(_userId: string): Promise<TermRow[]> {
   const gid = getLocalGroupId();
   if (!gid) return [];
-  const { data } = await supabase
-    .from('term_rows')
-    .select('*')
-    .eq('group_id', gid)
-    .order('sort_order');
-  return (data || []).map(rowFromDb);
+  try {
+    const { data, error } = await supabase
+      .from('term_rows')
+      .select('*')
+      .eq('group_id', gid)
+      .order('sort_order');
+    if (error) throw error;
+    return (data || []).map(rowFromDb);
+  } catch (e) {
+    console.error('Supabase term rows load failed:', e);
+    return [];
+  }
 }
 
 export async function upsertTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
   if (!rows.length) return;
-  await supabase
-    .from('term_rows')
-    .upsert(rows.map((r, i) => rowToDb(r, groupId, i)), { onConflict: 'id' });
+  try {
+    const { error } = await supabase
+      .from('term_rows')
+      .upsert(rows.map((r, i) => rowToDb(r, groupId, i)), { onConflict: 'id' });
+    if (error) throw error;
+  } catch (e) {
+    console.error('Supabase term rows save failed:', e);
+  }
 }
 
 export async function replaceTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
-  await supabase.from('term_rows').delete().eq('group_id', groupId);
-  if (rows.length) {
-    await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
+  try {
+    const { error: delError } = await supabase.from('term_rows').delete().eq('group_id', groupId);
+    if (delError) throw delError;
+    if (rows.length) {
+      const { error } = await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
+      if (error) throw error;
+    }
+  } catch (e) {
+    console.error('Supabase term rows replace failed:', e);
   }
 }
 
 export async function deleteTermRow(_userId: string, rowId: string): Promise<void> {
-  await supabase.from('term_rows').delete().eq('id', rowId);
+  try {
+    const { error } = await supabase.from('term_rows').delete().eq('id', rowId);
+    if (error) throw error;
+  } catch (e) {
+    console.error('Supabase term row delete failed:', e);
+  }
 }
 
 // ── Members ───────────────────────────────────────────────────────────────────
