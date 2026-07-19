@@ -13,13 +13,13 @@ import {
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
 const COLUMN_DEFS = [
-  { key:'date',           label:'Date',          width:'88px',  always:true },
+  { key:'date',           label:'Date',          width:'132px', always:true },
   { key:'topic',          label:'Topic / theme', width:'190px', always:true },
-  { key:'location',       label:'Location',      width:'80px'  },
-  { key:'focusNotes',     label:'Focus / notes', width:'130px' },
-  { key:'bring',          label:'Bring',         width:'100px' },
-  { key:'leader',         label:'Leader',        width:'68px'  },
-  { key:'assistantPatrol',label:'Asst. patrol',  width:'74px'  },
+  { key:'location',       label:'Location',      width:'100px' },
+  { key:'focusNotes',     label:'OAS focus',     width:'130px' },
+  { key:'bring',          label:'Bring',         width:'160px' },
+  { key:'leader',         label:'Leader',        width:'120px' },
+  { key:'assistantPatrol',label:'Asst. patrol',  width:'150px' },
 ];
 
 const PLAN_FILE_TYPE = 'scout-program-builder-term-plan';
@@ -34,7 +34,7 @@ function getMeetingDates(start: string, end: string, day: string): {date:string;
   while (cur.getDay() !== target) cur.setDate(cur.getDate()+1);
   const endD = new Date(end);
   while (cur <= endD) {
-    dates.push({ date: cur.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}), iso: cur.toISOString().slice(0,10) });
+    dates.push({ date: cur.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'}), iso: cur.toISOString().slice(0,10) });
     cur.setDate(cur.getDate()+7);
   }
   return dates;
@@ -413,11 +413,14 @@ export default function TermPage() {
         tbody tr.session td{background:${pale};}
         tbody tr.extra td{background:#fff;}
         td{padding:8px 9px;border-bottom:1px solid #f3f4f6;vertical-align:top;line-height:1.45;color:#111827;}
-        .cell-input,.cell-select{width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:#111827;padding:3px 4px;border-radius:4px;outline:none;font-family:inherit;}
+        .cell-input,.cell-select{width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:#111827;padding:3px 4px;border-radius:4px;outline:none;font-family:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
         .cell-input:hover,.cell-select:hover{background:rgba(0,0,0,0.04);}
-        .cell-input:focus,.cell-select:focus{border-color:${acc};background:#fff;}
+        .cell-input:focus,.cell-select:focus{border-color:${acc};background:#fff;text-overflow:clip;}
         .cell-input::placeholder{color:#c3c8d1;font-style:italic;}
-        .cell-date{font-weight:600;font-size:12px;margin-bottom:1px;}
+        .cell-input.no-placeholder-colour::placeholder{color:transparent;}
+        .cell-select{appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:none;padding-right:4px;cursor:pointer;}
+        .cell-select::-ms-expand{display:none;}
+        .cell-date{font-weight:600;font-size:12px;margin-bottom:1px;white-space:nowrap;}
         .cell-time{font-size:10px;color:#6b7280;}
         .cell-consent{display:flex;align-items:center;gap:4px;font-size:10px;color:#92600a;margin-top:2px;padding:0 4px;white-space:nowrap;cursor:pointer;}
         .cell-consent input{accent-color:${acc};}
@@ -655,7 +658,7 @@ export default function TermPage() {
                           );
                           if (c.key==='topic') return (
                             <td key="topic">
-                              <input className="cell-input" value={row.topic} placeholder="No topic yet"
+                              <input className="cell-input" value={row.topic} placeholder="No topic yet" title={row.topic}
                                 onChange={e=>updateCell(row.id,'topic',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                               <label className="cell-consent">
@@ -668,7 +671,7 @@ export default function TermPage() {
                           if (c.key==='focusNotes') return (
                             <td key="focusNotes">
                               <div className="oas-cell">
-                                <input className="cell-input" value={row.oasFocus||''} placeholder="OAS focus"
+                                <input className="cell-input no-placeholder-colour" value={row.oasFocus||''} title={row.oasFocus}
                                   onChange={e=>updateCell(row.id,'oasFocus',e.target.value)}
                                   onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                                 <button type="button" className={`notes-icon ${row.sessionNotes?'has-notes':''}`}
@@ -678,21 +681,21 @@ export default function TermPage() {
                           );
                           if (c.key==='location') return (
                             <td key="location">
-                              <input className="cell-input" value={row.location||''} placeholder="—"
+                              <input className="cell-input" value={row.location||''} placeholder="—" title={row.location}
                                 onChange={e=>updateCell(row.id,'location',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                             </td>
                           );
                           if (c.key==='bring') return (
                             <td key="bring">
-                              <input className="cell-input" value={row.bring||''} placeholder="—"
+                              <input className="cell-input" value={row.bring||''} placeholder="—" title={row.bring}
                                 onChange={e=>updateCell(row.id,'bring',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                             </td>
                           );
                           if (c.key==='leader') return (
                             <td key="leader">
-                              <select className="cell-select" value={row.leader||''}
+                              <select className="cell-select" value={row.leader||''} title={row.leader}
                                 onChange={e=>updateCell(row.id,'leader',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}>
                                 <option value="">—</option>
@@ -702,7 +705,7 @@ export default function TermPage() {
                           );
                           if (c.key==='assistantPatrol') return (
                             <td key="assistantPatrol">
-                              <input className="cell-input" list={`ap-list-${row.id}`} value={row.assistantPatrol||''} placeholder="—"
+                              <input className="cell-input" list={`ap-list-${row.id}`} value={row.assistantPatrol||''} placeholder="—" title={row.assistantPatrol}
                                 onChange={e=>updateCell(row.id,'assistantPatrol',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                               <datalist id={`ap-list-${row.id}`}>{allPeople.map(n=><option key={n} value={n}/>)}</datalist>
