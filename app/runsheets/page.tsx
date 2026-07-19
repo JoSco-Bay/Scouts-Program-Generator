@@ -14,13 +14,28 @@ export default function RunSheetsPage() {
 
   useEffect(() => {
     async function load() {
-      const [grp, sheetData] = await Promise.all([
-        loadGroupRecord(''),
-        loadRunSheets(''),
-      ]);
+      let grp = null;
+      let sheetData: RunSheetEntry[] = [];
+      try {
+        const [g, s] = await Promise.all([
+          loadGroupRecord(''),
+          loadRunSheets(''),
+        ]);
+        grp = g;
+        sheetData = Array.isArray(s) ? s : [];
+      } catch (e) {
+        console.error('Failed to load run sheets, falling back to localStorage:', e);
+        try {
+          const raw = localStorage.getItem('runsheets');
+          const cache = raw ? JSON.parse(raw) : {};
+          sheetData = Object.values(cache) as RunSheetEntry[];
+        } catch (e2) {
+          console.error('Failed to read localStorage runsheets cache:', e2);
+        }
+      }
       if (grp) setConfig(grp.config);
       setSheets(
-        sheetData.sort((a, b) => {
+        (sheetData || []).sort((a, b) => {
           const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
           return Date.parse(parts(a.entry.row?.date || '')) - Date.parse(parts(b.entry.row?.date || ''));
         })
@@ -105,7 +120,7 @@ export default function RunSheetsPage() {
       </div>
 
       <div className="body">
-        {sheets.length===0 ? (
+        {!sheets || sheets.length===0 ? (
           <div className="empty-state">
             <div className="empty-icon">📋</div>
             <div className="empty-title">No run sheets saved yet</div>
@@ -114,12 +129,12 @@ export default function RunSheetsPage() {
           </div>
         ) : (
           <div className="rs-list">
-            {sheets.map(sheet=>(
+            {sheets.map(sheet=>sheet && (
               <div key={sheet.dbId} className="rs-card">
                 <div>
-                  <div className="rs-date">{sheet.entry.row?.date}{sheet.entry.row?.time?` · ${sheet.entry.row.time}`:''}</div>
-                  <div className="rs-topic">{sheet.entry.row?.topic||'Untitled session'}</div>
-                  {sheet.entry.row?.oasFocus&&<span className="rs-oas">⚜ {sheet.entry.row.oasFocus}</span>}
+                  <div className="rs-date">{sheet.entry?.row?.date}{sheet.entry?.row?.time?` · ${sheet.entry.row.time}`:''}</div>
+                  <div className="rs-topic">{sheet.entry?.row?.topic||'Untitled session'}</div>
+                  {sheet.entry?.row?.oasFocus&&<span className="rs-oas">⚜ {sheet.entry.row.oasFocus}</span>}
                 </div>
                 <button className="view-btn" onClick={()=>viewSheet(sheet)}>View →</button>
               </div>

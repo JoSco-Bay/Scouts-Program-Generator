@@ -22,23 +22,29 @@ export interface GroupRecord {
 export async function loadGroupRecord(_userId: string): Promise<GroupRecord | null> {
   const gid = getLocalGroupId();
   if (!gid) return null;
-  const { data } = await supabase
-    .from('groups')
-    .select('*')
-    .eq('id', gid)
-    .maybeSingle();
-  if (!data) return null;
-  return {
-    id: data.id,
-    config: {
-      groupName:   data.group_name,
-      section:     data.section,
-      meetingDay:  data.meeting_day,
-      meetingTime: data.meeting_time,
-      leaders:     data.leaders  || [],
-      members:     data.members  || [],
-    },
-  };
+  try {
+    const { data, error } = await supabase
+      .from('groups')
+      .select('*')
+      .eq('id', gid)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return {
+      id: data.id,
+      config: {
+        groupName:   data.group_name,
+        section:     data.section,
+        meetingDay:  data.meeting_day,
+        meetingTime: data.meeting_time,
+        leaders:     data.leaders  || [],
+        members:     data.members  || [],
+      },
+    };
+  } catch (e) {
+    console.error('Supabase group load failed:', e);
+    return null;
+  }
 }
 
 export async function saveGroupConfig(
