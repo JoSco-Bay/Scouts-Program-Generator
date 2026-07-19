@@ -192,6 +192,11 @@ export default function TermPage() {
     setRows(rs => rs.map(r => r.id===id ? {...r, [field]: value} as TermRow : r));
   };
   const commitRow = () => { saveRows(sortByDate(rows)); };
+  const autoSize = (el: HTMLTextAreaElement|null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
   const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
   };
@@ -422,9 +427,15 @@ export default function TermPage() {
         .cell-select::-ms-expand{display:none;}
         .cell-date{font-weight:600;font-size:12px;margin-bottom:1px;white-space:nowrap;}
         .cell-time{font-size:10px;color:#6b7280;}
+        .cell-textarea{display:block;width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:12px;color:#111827;padding:3px 4px;border-radius:4px;outline:none;font-family:inherit;resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;line-height:1.4;min-height:1.4em;vertical-align:top;}
+        .cell-textarea:hover{background:rgba(0,0,0,0.04);}
+        .cell-textarea:focus{border-color:${acc};background:#fff;}
+        .cell-textarea::placeholder{color:#c3c8d1;font-style:italic;}
+        .cell-textarea.no-placeholder-colour::placeholder{color:transparent;}
         .cell-consent{display:flex;align-items:center;gap:4px;font-size:10px;color:#92600a;margin-top:2px;padding:0 4px;white-space:nowrap;cursor:pointer;}
         .cell-consent input{accent-color:${acc};}
-        .oas-cell{display:flex;align-items:center;gap:2px;}
+        .oas-cell{display:flex;align-items:flex-start;gap:2px;}
+        .oas-cell .notes-icon{margin-top:2px;}
         .notes-icon{border:none;background:transparent;cursor:pointer;font-size:12px;padding:2px;line-height:1;flex-shrink:0;color:#c3c8d1;opacity:0.7;}
         .notes-icon:hover{color:${acc};opacity:1;}
         .notes-icon.has-notes{color:${acc};opacity:1;}
@@ -658,7 +669,7 @@ export default function TermPage() {
                           );
                           if (c.key==='topic') return (
                             <td key="topic">
-                              <input className="cell-input" value={row.topic} placeholder="No topic yet" title={row.topic}
+                              <textarea className="cell-textarea" rows={1} ref={autoSize} value={row.topic} placeholder="No topic yet"
                                 onChange={e=>updateCell(row.id,'topic',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                               <label className="cell-consent">
@@ -671,7 +682,7 @@ export default function TermPage() {
                           if (c.key==='focusNotes') return (
                             <td key="focusNotes">
                               <div className="oas-cell">
-                                <input className="cell-input no-placeholder-colour" value={row.oasFocus||''} title={row.oasFocus}
+                                <textarea className="cell-textarea no-placeholder-colour" rows={1} ref={autoSize} value={row.oasFocus||''}
                                   onChange={e=>updateCell(row.id,'oasFocus',e.target.value)}
                                   onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                                 <button type="button" className={`notes-icon ${row.sessionNotes?'has-notes':''}`}
@@ -681,14 +692,14 @@ export default function TermPage() {
                           );
                           if (c.key==='location') return (
                             <td key="location">
-                              <input className="cell-input" value={row.location||''} placeholder="—" title={row.location}
+                              <textarea className="cell-textarea" rows={1} ref={autoSize} value={row.location||''} placeholder="—"
                                 onChange={e=>updateCell(row.id,'location',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                             </td>
                           );
                           if (c.key==='bring') return (
                             <td key="bring">
-                              <input className="cell-input" value={row.bring||''} placeholder="—" title={row.bring}
+                              <textarea className="cell-textarea" rows={1} ref={autoSize} value={row.bring||''} placeholder="—"
                                 onChange={e=>updateCell(row.id,'bring',e.target.value)}
                                 onBlur={commitRow} onKeyDown={handleCellKeyDown}/>
                             </td>
