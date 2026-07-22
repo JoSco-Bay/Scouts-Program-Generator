@@ -91,6 +91,7 @@ export default function TermPage() {
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
   const [aiError, setAiError] = useState('');
+  const [exportingWord, setExportingWord] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Tooltip click handler ──────────────────────────────────────────────────
@@ -236,6 +237,34 @@ export default function TermPage() {
     a.href = url; a.download = `${safeName}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadWord = async () => {
+    if (!config) return;
+    setExportingWord(true);
+    try {
+      const res = await fetch('/api/export-term', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ termName, config, rows }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Export failed (${res.status}): ${errText.slice(0,200)}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (termName||'term-plan').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+      a.href = url; a.download = `${safeName}.docx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Word export failed:', err);
+      alert('Could not generate the Word document. Please try again.');
+    } finally {
+      setExportingWord(false);
+    }
   };
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -558,6 +587,7 @@ export default function TermPage() {
             </div>
             <div className="tl">
               <button className="tbtn pri" style={{background:acc}} onClick={()=>window.print()}>🖨 Print / Save as PDF</button>
+              <button className="tbtn" onClick={downloadWord} disabled={exportingWord}>{exportingWord?'⏳ Generating…':'📄 Download as Word'}</button>
               <button className="tbtn" onClick={downloadPlan}>💾 Save plan</button>
               <button className="tbtn" onClick={()=>fileInputRef.current?.click()}>📂 Load plan</button>
               <input ref={fileInputRef} type="file" accept=".json" className="upload-input" onChange={handleUpload}/>
