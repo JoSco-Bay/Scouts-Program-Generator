@@ -150,17 +150,40 @@ export async function upsertTermRows(_userId: string, groupId: string, rows: Ter
   }
 }
 
-export async function replaceTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
-  try {
+// Two overlapping replaceTermRows calls for the same group (e.g. a double-fired upload,
+// a fast-refresh re-invoke) can otherwise interleave: both deletes see nothing to remove,
+// then both inserts land, and the group ends up with both row sets coexisting. Queue calls
+// per group so a second call always starts after the first has fully finished.
+const replaceTermRowsQueues = new Map<string, Promise<unknown>>();
+
+async function doReplaceTermRows(groupId: string, rows: TermRow[]): Promise<void> {
+  // Delete, then verify the group is actually clear before inserting — a delete that
+  // silently leaves rows behind must never let the new set coexist with the old one.
+  for (let attempt = 0; ; attempt++) {
     const { error: delError } = await supabase.from('term_rows').delete().eq('group_id', groupId);
     if (delError) throw delError;
-    if (rows.length) {
-      const { error } = await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
-      if (error) throw error;
-    }
-  } catch (e) {
-    console.error('Supabase term rows replace failed:', e);
+    const { count, error: countError } = await supabase
+      .from('term_rows')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', groupId);
+    if (countError) throw countError;
+    if (!count) break;
+    if (attempt >= 2) throw new Error(`Could not clear existing term rows for group ${groupId} (${count} still remain after 3 attempts)`);
   }
+  if (rows.length) {
+    const { error } = await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
+    if (error) throw error;
+  }
+}
+
+export async function replaceTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
+  const prior = replaceTermRowsQueues.get(groupId) ?? Promise.resolve();
+  const run = prior.then(
+    () => doReplaceTermRows(groupId, rows),
+    () => doReplaceTermRows(groupId, rows),
+  ).catch(e => { console.error('Supabase term rows replace failed:', e); });
+  replaceTermRowsQueues.set(groupId, run);
+  return run;
 }
 
 export async function deleteTermRow(_userId: string, rowId: string): Promise<void> {

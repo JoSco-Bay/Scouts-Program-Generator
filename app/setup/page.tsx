@@ -34,6 +34,7 @@ export default function SetupPage() {
   const [meetingTime, setMeetingTime] = useState('18:00');
   const [leaders, setLeaders]       = useState(['']);
   const [members, setMembers]       = useState(['']);
+  const [saving, setSaving]         = useState(false);
 
   // ── Tooltip click handler ──────────────────────────────────────────────────
   useEffect(() => {
@@ -90,6 +91,8 @@ export default function SetupPage() {
   const accText = SECTION_COLOURS[section]?.text   || '#fff';
 
   const save = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       const config: GroupConfig = {
         groupName,
@@ -135,6 +138,7 @@ export default function SetupPage() {
       router.push('/term');
     } catch (err) {
       console.error('saveGroupConfig failed:', err);
+      setSaving(false);
     }
   };
 
@@ -305,8 +309,8 @@ export default function SetupPage() {
           </div>
         </div>
 
-        <button className="save" style={{background:acc,color:accText}} onClick={save}>
-          Save and start planning →
+        <button className="save" style={{background:acc,color:accText,opacity:saving?0.7:1,cursor:saving?'not-allowed':'pointer'}} onClick={save} disabled={saving}>
+          {saving?'Saving…':'Save and start planning →'}
         </button>
       </div>
 

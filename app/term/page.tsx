@@ -13,13 +13,13 @@ import {
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
 const COLUMN_DEFS = [
-  { key:'date',           label:'Date',          width:'88px',  always:true },
-  { key:'topic',          label:'Topic / theme', width:'190px', always:true },
-  { key:'location',       label:'Location',      width:'80px'  },
-  { key:'focusNotes',     label:'Focus / notes', width:'130px' },
-  { key:'bring',          label:'Bring',         width:'100px' },
-  { key:'leader',         label:'Leader',        width:'68px'  },
-  { key:'assistantPatrol',label:'Asst. patrol',  width:'74px'  },
+  { key:'date',           label:'Date',          width:'9%',  always:true },
+  { key:'topic',          label:'Topic / theme', width:'15%', always:true },
+  { key:'location',       label:'Location',      width:'11%' },
+  { key:'focusNotes',     label:'Focus / notes', width:'28%' },
+  { key:'bring',          label:'Bring',         width:'19%' },
+  { key:'leader',         label:'Leader',        width:'10%' },
+  { key:'assistantPatrol',label:'Asst. patrol',  width:'9%'  },
 ];
 
 const PLAN_FILE_TYPE = 'scout-program-builder-term-plan';
@@ -72,9 +72,9 @@ export default function TermPage() {
   const [groupId, setGroupId]     = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(true);
   const [config, setConfig]       = useState<GroupConfig|null>(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate]     = useState('');
-  const [termName, setTermName]   = useState('Term 2, 2026');
+  const [startDate, setStartDate] = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termStartDate')||'') : ''));
+  const [endDate, setEndDate]     = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termEndDate')||'') : ''));
+  const [termName, setTermName]   = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termName')||'Term 2, 2026') : 'Term 2, 2026'));
   const [rows, setRows]           = useState<TermRow[]>([]);
   const [fullMembers, setFullMembers] = useState<Member[]>([]);
   const [editingId, setEditingId] = useState<string|null>(null);
@@ -134,8 +134,6 @@ export default function TermPage() {
         const cached = localStorage.getItem('programRows');
         if (cached) try { const r = JSON.parse(cached); setRows(r); setDatesSet(r.length > 0); } catch {}
       }
-      const cachedTermName = localStorage.getItem('termName');
-      if (cachedTermName) setTermName(cachedTermName);
       setFullMembers(members);
       setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
       setDbLoading(false);
@@ -156,6 +154,14 @@ export default function TermPage() {
   useEffect(() => {
     if (termName) localStorage.setItem('termName', termName);
   }, [termName]);
+
+  useEffect(() => {
+    if (startDate) localStorage.setItem('termStartDate', startDate);
+  }, [startDate]);
+
+  useEffect(() => {
+    if (endDate) localStorage.setItem('termEndDate', endDate);
+  }, [endDate]);
 
   const sc  = config ? SECTION_COLOURS[config.section] || SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
   const acc  = sc.accent;
@@ -191,7 +197,19 @@ export default function TermPage() {
   }, [termName]);
 
   const startEdit = (row: TermRow) => { setEditingId(row.id); setEditDraft({...row}); };
-  const saveEdit  = () => { saveRows(sortByDate(rows.map(r=>r.id===editingId?{...r,...editDraft} as TermRow:r))); setEditingId(null); };
+
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout>|null>(null);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const flashSaved = () => {
+    setSavedMsg(true);
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    savedTimeoutRef.current = setTimeout(()=>setSavedMsg(false), 2000);
+  };
+  const commitEditDraft = (draft: Partial<TermRow>) => {
+    if (!editingId) return;
+    saveRows(sortByDate(rows.map(r=>r.id===editingId?{...r,...draft} as TermRow:r)));
+    flashSaved();
+  };
 
   const deleteRow = async (id: string) => {
     if (!confirm('Remove this row?')) return;
@@ -205,12 +223,18 @@ export default function TermPage() {
     const updated = sortByDate([...rows,nr]); saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
   };
 
+  const MOVE_CONTENT_FIELDS = ['topic','location','oasFocus','sessionNotes','bring','leader','assistantPatrol','consentRequired','rowType'] as const;
+
   const moveRow = (id: string, dir: -1|1) => {
     const idx = rows.findIndex(r=>r.id===id);
     const newIdx = idx+dir;
     if (newIdx<0||newIdx>=rows.length) return;
     const updated = [...rows];
-    [updated[idx],updated[newIdx]] = [updated[newIdx],updated[idx]];
+    const a = updated[idx], b = updated[newIdx];
+    const aContent: Partial<TermRow> = {}, bContent: Partial<TermRow> = {};
+    MOVE_CONTENT_FIELDS.forEach(f => { (aContent as Record<string,unknown>)[f] = a[f]; (bContent as Record<string,unknown>)[f] = b[f]; });
+    updated[idx] = {...a, ...bContent};
+    updated[newIdx] = {...b, ...aContent};
     saveRows(updated);
   };
 
@@ -426,8 +450,8 @@ export default function TermPage() {
         .th-tag.a{color:#fff;}
         .tbl-wrap{overflow-x:auto;}
         table{width:100%;border-collapse:collapse;font-size:12px;}
-        thead tr{background:${acc};}
-        th{padding:8px 9px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#fff;white-space:nowrap;}
+        thead tr{background:#BDD7EE;}
+        th{padding:8px 9px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#1E3A5F;white-space:nowrap;}
         tbody tr.session td{background:${pale};}
         tbody tr.extra td{background:#fff;}
         tbody tr.editing td{background:rgba(193,127,36,0.05)!important;}
@@ -460,6 +484,8 @@ export default function TermPage() {
         .ap-check-row{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;padding:2px 0;user-select:none;}
         .ap-check-row:hover{color:#111827;}
         .ef-actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+        .saved-flash{font-size:11px;color:#16a34a;font-weight:600;opacity:0;transition:opacity 0.3s ease;}
+        .saved-flash.show{opacity:1;}
         .save-btn{font-size:12px;padding:6px 16px;border-radius:6px;border:none;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;}
         .cancel-btn{font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;}
         .type-sel{font-size:11px;padding:5px 8px;border-radius:5px;border:1px solid #d1d5db;background:#fff;color:#374151;font-family:inherit;margin-left:auto;}
@@ -664,27 +690,27 @@ export default function TermPage() {
                     <Fragment key={row.id}>
                       <tr className={`${row.rowType==='session'?'session':'extra'} ${editingId===row.id?'editing':''}`}>
                         {activeCols.map(c=>{
-                          if (c.key==='date') return <td key="date"><div className="dm">{row.date}</div><div className="dt">{row.time}</div></td>;
+                          if (c.key==='date') return <td key="date" style={{width:c.width}}><div className="dm">{row.date}</div><div className="dt">{row.time}</div></td>;
                           if (c.key==='topic') return (
-                            <td key="topic">
+                            <td key="topic" style={{width:c.width}}>
                               {row.topic||<span style={{color:'#d1d5db',fontStyle:'italic'}}>No topic yet</span>}
                               {row.consentRequired&&<div><span className="ctag">⚠ Consent</span></div>}
                             </td>
                           );
                           if (c.key==='focusNotes') return (
-                            <td key="focusNotes">
+                            <td key="focusNotes" style={{width:c.width, whiteSpace:'normal', overflow:'visible', maxHeight:'none', textOverflow:'unset'}}>
                               {row.oasFocus&&<div><span className="otag" style={{marginBottom:'3px',display:'inline-block'}}>{row.oasFocus}</span></div>}
                               {row.sessionNotes
-                                ?<span style={{fontSize:'11px',color:'#6b7280',lineHeight:'1.4',display:'block'}}>{row.sessionNotes.length>60?row.sessionNotes.slice(0,60)+'…':row.sessionNotes}</span>
+                                ?<span style={{fontSize:'11px',color:'#6b7280',lineHeight:'1.4',display:'block',whiteSpace:'normal',overflow:'visible'}}>{row.sessionNotes}</span>
                                 :(!row.oasFocus&&'—')
                               }
                             </td>
                           );
-                          if (c.key==='location') return <td key="location">{row.location||'—'}</td>;
-                          if (c.key==='bring') return <td key="bring">{row.bring||'—'}</td>;
-                          if (c.key==='leader') return <td key="leader">{row.leader||'—'}</td>;
-                          if (c.key==='assistantPatrol') return <td key="assistantPatrol">{row.assistantPatrol||'—'}</td>;
-                          return <td key={c.key}>—</td>;
+                          if (c.key==='location') return <td key="location" style={{width:c.width}}>{row.location||'—'}</td>;
+                          if (c.key==='bring') return <td key="bring" style={{width:c.width}}>{row.bring||'—'}</td>;
+                          if (c.key==='leader') return <td key="leader" style={{width:c.width}}>{row.leader||'—'}</td>;
+                          if (c.key==='assistantPatrol') return <td key="assistantPatrol" style={{width:c.width}}>{row.assistantPatrol||'—'}</td>;
+                          return <td key={c.key} style={{width:c.width}}>—</td>;
                         })}
                         <td>
                           <div className="act-col">
@@ -703,20 +729,21 @@ export default function TermPage() {
                           <td colSpan={colSpanTotal} style={{padding:0,borderLeft:`3px solid ${acc}`}}>
                             <div className="edit-form">
                               <div className="ef3">
-                                <div><div className="efl">Date</div><input className="efi" value={editDraft.date||''} onChange={e=>setEditDraft(d=>({...d,date:e.target.value}))} placeholder="e.g. Wed 22 Apr"/></div>
-                                <div><div className="efl">Time</div><input className="efi" value={editDraft.time||''} onChange={e=>setEditDraft(d=>({...d,time:e.target.value}))} placeholder="e.g. 6:00pm"/></div>
-                                <div><div className="efl">Location</div><input className="efi" value={editDraft.location||''} onChange={e=>setEditDraft(d=>({...d,location:e.target.value}))}/></div>
+                                <div><div className="efl">Date</div><input className="efi" value={editDraft.date||''} onChange={e=>setEditDraft(d=>({...d,date:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)} placeholder="e.g. Wed 22 Apr"/></div>
+                                <div><div className="efl">Time</div><input className="efi" value={editDraft.time||''} onChange={e=>setEditDraft(d=>({...d,time:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)} placeholder="e.g. 6:00pm"/></div>
+                                <div><div className="efl">Location</div><input className="efi" value={editDraft.location||''} onChange={e=>setEditDraft(d=>({...d,location:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}/></div>
                               </div>
                               <div className="ef3">
-                                <div><div className="efl">Topic / theme</div><input className="efi" value={editDraft.topic||''} onChange={e=>setEditDraft(d=>({...d,topic:e.target.value}))}/></div>
-                                <div><div className="efl">OAS focus</div><input className="efi" value={editDraft.oasFocus||''} onChange={e=>setEditDraft(d=>({...d,oasFocus:e.target.value}))} placeholder="e.g. Bushcraft S1"/></div>
-                                <div><div className="efl">Bring</div><input className="efi" value={editDraft.bring||''} onChange={e=>setEditDraft(d=>({...d,bring:e.target.value}))}/></div>
+                                <div><div className="efl">Topic / theme</div><input className="efi" value={editDraft.topic||''} onChange={e=>setEditDraft(d=>({...d,topic:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}/></div>
+                                <div><div className="efl">OAS focus</div><input className="efi" value={editDraft.oasFocus||''} onChange={e=>setEditDraft(d=>({...d,oasFocus:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)} placeholder="e.g. Bushcraft S1"/></div>
+                                <div><div className="efl">Bring</div><input className="efi" value={editDraft.bring||''} onChange={e=>setEditDraft(d=>({...d,bring:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}/></div>
                               </div>
                               <div style={{marginBottom:'8px'}}>
                                 <div className="efl" style={{marginBottom:'3px'}}>Session notes <span style={{fontSize:'10px',color:'#9ca3af',fontWeight:'400',textTransform:'none',letterSpacing:0}}>— what to include, context for AI run sheet generation</span></div>
                                 <textarea className="efi" style={{resize:'vertical',minHeight:'68px',lineHeight:'1.55',width:'100%'}}
                                   value={editDraft.sessionNotes||''}
                                   onChange={e=>setEditDraft(d=>({...d,sessionNotes:e.target.value}))}
+                                  onBlur={()=>commitEditDraft(editDraft)}
                                   placeholder="e.g. Include reef knot and bowline. Joeys are still new so keep instructions simple."/>
                               </div>
                               <div className="ef2">
@@ -727,7 +754,7 @@ export default function TermPage() {
                                   const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
                                   return (<>
                                     <div><div className="efl">Leader</div>
-                                      <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))}>
+                                      <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}>
                                         <option value="">— select —</option>
                                         {allPeople.map(n=><option key={n} value={n}>{n}</option>)}
                                       </select>
@@ -746,7 +773,9 @@ export default function TermPage() {
                                                     setEditDraft(d=>{
                                                       const parts = (d.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
                                                       const next = ticked ? [...new Set([...parts,name])] : parts.filter(p=>p!==name);
-                                                      return {...d,assistantPatrol:next.join(', ')};
+                                                      const nextDraft = {...d,assistantPatrol:next.join(', ')};
+                                                      commitEditDraft(nextDraft);
+                                                      return nextDraft;
                                                     });
                                                   }}
                                                 />
@@ -760,13 +789,17 @@ export default function TermPage() {
                                 })()}
                               </div>
                               <div className="ef-actions">
-                                <button className="save-btn" style={{background:acc}} onClick={saveEdit}>Save</button>
-                                <button className="cancel-btn" onClick={()=>setEditingId(null)}>Cancel</button>
+                                <button className="cancel-btn" onClick={()=>setEditingId(null)}>Close</button>
+                                <span className={`saved-flash ${savedMsg?'show':''}`}>Saved ✓</span>
                                 <label className="ef-check" style={{marginLeft:'8px'}}>
-                                  <input type="checkbox" style={{accentColor:acc}} checked={editDraft.consentRequired||false} onChange={e=>setEditDraft(d=>({...d,consentRequired:e.target.checked}))}/>
+                                  <input type="checkbox" style={{accentColor:acc}} checked={editDraft.consentRequired||false} onChange={e=>{
+                                    const nextDraft = {...editDraft, consentRequired:e.target.checked};
+                                    setEditDraft(nextDraft);
+                                    commitEditDraft(nextDraft);
+                                  }}/>
                                   Consent required
                                 </label>
-                                <select className="type-sel" value={editDraft.rowType||'session'} onChange={e=>setEditDraft(d=>({...d,rowType:e.target.value as 'session'|'extra'}))}>
+                                <select className="type-sel" value={editDraft.rowType||'session'} onChange={e=>setEditDraft(d=>({...d,rowType:e.target.value as 'session'|'extra'}))} onBlur={()=>commitEditDraft(editDraft)}>
                                   <option value="session">Weekly session</option>
                                   <option value="extra">Extra event</option>
                                 </select>
