@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   loadGroupRecord, saveGroupConfig,
   loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
-  loadMembers, upsertMembers,
+  loadMembers, replaceMembers,
 } from "@/lib/db";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
@@ -321,7 +321,7 @@ export default function TermPage() {
         if (data.members && activeGroupId) {
           setFullMembers(data.members);
           setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
-          await upsertMembers('', activeGroupId, data.members);
+          await replaceMembers('', activeGroupId, data.members);
         }
       } catch {
         alert('Could not read this file — it may be corrupted or not a valid term plan file.');

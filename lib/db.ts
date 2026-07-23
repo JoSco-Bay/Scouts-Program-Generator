@@ -253,8 +253,10 @@ export async function loadMembers(_userId: string): Promise<Member[]> {
     .select('*')
     .eq('group_id', gid)
     .order('created_at');
-  if (error) return getLocalMembersCache();
-  const members = (data || []).map(memberFromDb);
+  // Supabase is the source of truth only when it actually returns rows — an error or an
+  // empty result both fall back to the local cache instead of ever being combined with it.
+  if (error || !data || data.length === 0) return getLocalMembersCache();
+  const members = data.map(memberFromDb);
   setLocalMembersCache(members);
   return members;
 }
@@ -269,6 +271,42 @@ export async function upsertMembers(_userId: string, groupId: string, members: M
     members.forEach(m => byId.set(m.id, m));
     setLocalMembersCache(Array.from(byId.values()));
   }
+}
+
+// Loading a saved plan file replaces the member list wholesale, the same way it replaces
+// term rows. Upserting the file's members by id is not safe here: a re-uploaded (or older)
+// file's member ids can differ from whatever ids the group's members already have, so an
+// upsert just adds duplicate-by-name rows instead of recognizing them as the same person.
+// Mirrors replaceTermRows' queued, verify-before-insert pattern for the same race safety.
+const replaceMembersQueues = new Map<string, Promise<unknown>>();
+
+async function doReplaceMembers(groupId: string, members: Member[]): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    const { error: delError } = await supabase.from('members').delete().eq('group_id', groupId);
+    if (delError) throw delError;
+    const { count, error: countError } = await supabase
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', groupId);
+    if (countError) throw countError;
+    if (!count) break;
+    if (attempt >= 2) throw new Error(`Could not clear existing members for group ${groupId} (${count} still remain after 3 attempts)`);
+  }
+  if (members.length) {
+    const { error } = await supabase.from('members').insert(members.map(m => memberToDb(m, groupId)));
+    if (error) throw error;
+  }
+  setLocalMembersCache(members);
+}
+
+export async function replaceMembers(_userId: string, groupId: string, members: Member[]): Promise<void> {
+  const prior = replaceMembersQueues.get(groupId) ?? Promise.resolve();
+  const run = prior.then(
+    () => doReplaceMembers(groupId, members),
+    () => doReplaceMembers(groupId, members),
+  ).catch(e => { console.error('Supabase members replace failed:', e); });
+  replaceMembersQueues.set(groupId, run);
+  return run;
 }
 
 export async function deleteMemberById(_userId: string, memberId: string): Promise<void> {
