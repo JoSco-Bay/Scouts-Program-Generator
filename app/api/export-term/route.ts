@@ -5,10 +5,10 @@ import {
 import type { GroupConfig, TermRow } from "@/lib/types";
 
 const SECTION_DOCX = {
-  Joeys:     { accent: "C17F24", pale: "FDE8B8", header: "2C3E6B" },
-  Cubs:      { accent: "E8B800", pale: "FFF5B0", header: "3D2800" },
-  Scouts:    { accent: "6BBF5A", pale: "C8EFC0", header: "1A4D12" },
-  Venturers: { accent: "B5485E", pale: "F5C0CC", header: "4A1020" },
+  Joeys:     { accent: "C17F24", pale: "FEF3DC", header: "2C3E6B", titleText: "000000" },
+  Cubs:      { accent: "E8B800", pale: "FFFACC", header: "3D2800", titleText: "000000" },
+  Scouts:    { accent: "6BBF5A", pale: "E8F5E4", header: "1A4D12", titleText: "000000" },
+  Venturers: { accent: "AA2A33", pale: "F5E0E2", header: "AA2A33", titleText: "FFFFFF" },
 } as const;
 
 const COL_WIDTHS = [895, 1500, 1144, 2977, 1984, 1027, 939]; // Date, Topic, Location, Focus/Notes, Bring, Leader, Asst Patrol
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     const titleRow = new TableRow({
       children: [
         cell(
-          [para([run(`${termName}  —  ${config.section}`, { bold: true, size: 24 })])],
+          [para([run(`${termName}  —  ${config.section}`, { bold: true, size: 24, color: palette.titleText })])],
           TABLE_WIDTH, palette.accent, 7,
         ),
       ],
