@@ -296,35 +296,63 @@ export default function TermPage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      let data: { type?: string; termName?: string; startDate?: string; endDate?: string; config?: GroupConfig; rows?: TermRow[]; members?: Member[] };
       try {
-        const data = JSON.parse(ev.target?.result as string);
-        if (data.type !== PLAN_FILE_TYPE) {
-          alert("This file doesn't look like a Scout Program Builder term plan.");
-          return;
-        }
-        if (data.termName) { setTermName(data.termName); localStorage.setItem('termName', data.termName); }
-        if (data.startDate) setStartDate(data.startDate);
-        if (data.endDate) setEndDate(data.endDate);
-
-        let activeGroupId = groupId;
-        if (data.config) {
-          setConfig(data.config);
-          localStorage.setItem('groupConfig', JSON.stringify(data.config));
-          activeGroupId = await saveGroupConfig('', groupId, data.config);
-          setGroupId(activeGroupId);
-        }
-        if (data.rows && activeGroupId) {
-          setRows(data.rows); setDatesSet(true);
-          localStorage.setItem('programRows', JSON.stringify(data.rows));
-          await replaceTermRows('', activeGroupId, data.rows);
-        }
-        if (data.members && activeGroupId) {
-          setFullMembers(data.members);
-          setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
-          await replaceMembers('', activeGroupId, data.members);
-        }
+        data = JSON.parse(ev.target?.result as string);
       } catch {
         alert('Could not read this file — it may be corrupted or not a valid term plan file.');
+        return;
+      }
+      if (data.type !== PLAN_FILE_TYPE) {
+        alert("This file doesn't look like a Scout Program Builder term plan.");
+        return;
+      }
+
+      if (data.termName) { setTermName(data.termName); localStorage.setItem('termName', data.termName); }
+      if (data.startDate) setStartDate(data.startDate);
+      if (data.endDate) setEndDate(data.endDate);
+
+      let activeGroupId = groupId;
+      let syncFailed = false;
+
+      if (data.config) {
+        setConfig(data.config);
+        localStorage.setItem('groupConfig', JSON.stringify(data.config));
+        try {
+          activeGroupId = await saveGroupConfig('', groupId, data.config);
+          setGroupId(activeGroupId);
+        } catch (err) {
+          console.error('Group config sync to Supabase failed during upload:', err);
+          syncFailed = true;
+        }
+      }
+
+      if (data.rows) {
+        setRows(data.rows); setDatesSet(true);
+        localStorage.setItem('programRows', JSON.stringify(data.rows));
+        if (activeGroupId) {
+          await replaceTermRows('', activeGroupId, data.rows);
+          const verify = await loadTermRows('');
+          if (verify.length !== data.rows.length) syncFailed = true;
+        } else {
+          syncFailed = true;
+        }
+      }
+
+      if (data.members) {
+        setFullMembers(data.members);
+        setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
+        if (activeGroupId) {
+          await replaceMembers('', activeGroupId, data.members);
+          const verify = await loadMembers('');
+          if (verify.length !== data.members.length) syncFailed = true;
+        } else {
+          syncFailed = true;
+        }
+      }
+
+      if (syncFailed) {
+        alert("Your plan loaded and is saved on this device, but syncing it to your online account failed (check your connection). It won't appear on other devices until you try Load plan again successfully.");
       }
     };
     reader.readAsText(file);
