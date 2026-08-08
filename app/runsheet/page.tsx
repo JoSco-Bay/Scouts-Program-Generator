@@ -21,6 +21,26 @@ interface RunSheetSource {
 
 function genId(){ return Math.random().toString(36).slice(2,9); }
 
+const DEFAULT_ACTIVITY_DURATION = 15; // minutes, used when a gap can't be determined
+
+function parseTimeToMinutes(t: string): number | null {
+  if (!t) return null;
+  const m = t.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10) % 12;
+  if (m[3].toLowerCase() === 'pm') h += 12;
+  return h * 60 + parseInt(m[2], 10);
+}
+
+function formatMinutesToTime(mins: number): string {
+  const wrapped = ((mins % 1440) + 1440) % 1440;
+  let h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2, '0')}${ampm}`;
+}
+
 export default function RunSheetPage() {
   const router = useRouter();
   const [groupId, setGroupId]         = useState<string | null>(null);
@@ -151,6 +171,41 @@ export default function RunSheetPage() {
     if (!data) return;
     if (confirm('Remove this activity?')) setData(d=>d?{...d,activities:d.activities.filter(a=>a.id!==id)}:d);
   };
+
+  const moveActivity = (id: string, dir: -1|1) => {
+    if (!data) return;
+    const activities = data.activities;
+    const idx = activities.findIndex(a=>a.id===id);
+    const newIdx = idx+dir;
+    if (idx===-1 || newIdx<0 || newIdx>=activities.length) return;
+
+    // Each activity's own duration is the gap to whatever currently follows it — computed
+    // before the swap so it travels with the activity, not with the position it leaves behind.
+    const durations = activities.map((a,i)=>{
+      if (i===activities.length-1) return DEFAULT_ACTIVITY_DURATION;
+      const t1 = parseTimeToMinutes(a.time);
+      const t2 = parseTimeToMinutes(activities[i+1].time);
+      if (t1==null || t2==null) return DEFAULT_ACTIVITY_DURATION;
+      const gap = t2-t1;
+      return gap>0 ? gap : DEFAULT_ACTIVITY_DURATION;
+    });
+
+    const reordered = [...activities];
+    const reorderedDurations = [...durations];
+    [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
+    [reorderedDurations[idx], reorderedDurations[newIdx]] = [reorderedDurations[newIdx], reorderedDurations[idx]];
+
+    // Recalculate times in sequence: the first activity keeps its own time as the anchor,
+    // then each next activity's start time = previous activity's new time + its duration.
+    let cursor = parseTimeToMinutes(reordered[0]?.time) ?? 18*60;
+    const retimed = reordered.map((a,i)=>{
+      if (i===0) return {...a, time: formatMinutesToTime(cursor)};
+      cursor += reorderedDurations[i-1];
+      return {...a, time: formatMinutesToTime(cursor)};
+    });
+
+    setData(d=>d?{...d, activities: retimed}:d);
+  };
   const addActivity = (optional=false) => {
     if (!data) return;
     const newA: ActivityRow = {id:genId(), time:'', name: optional?'Optional game':'New activity', detail:'', optional};
@@ -279,6 +334,10 @@ export default function RunSheetPage() {
         .atag.opt{background:#f5f5f3;color:#6b7280;border-color:#e5e7eb;}
         .atag.recipe{background:rgba(193,127,36,0.08);color:var(--acc);border-color:rgba(193,127,36,0.25);cursor:pointer;}
         .av-actions{padding:9px 10px 9px 0;display:flex;flex-direction:column;gap:4px;align-items:stretch;}
+        .av-move-row{display:flex;gap:3px;}
+        .move-btn{flex:1;font-size:11px;padding:2px 5px;border-radius:4px;border:1px solid #e5e7eb;background:#fff;color:#9ca3af;cursor:pointer;line-height:1;font-family:inherit;}
+        .move-btn:hover{border-color:var(--acc);color:var(--acc);}
+        .move-btn:disabled{opacity:0.3;cursor:not-allowed;}
         .edit-btn{font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;white-space:nowrap;}
         .edit-btn:hover{border-color:var(--acc);color:var(--acc);}
         .del-btn{font-size:10px;padding:2px 5px;border-radius:4px;border:1px solid transparent;background:transparent;color:#d1d5db;cursor:pointer;font-family:inherit;text-align:center;}
@@ -426,7 +485,7 @@ export default function RunSheetPage() {
             )}
 
             <div className="sbar">Do — Run Sheet</div>
-            {data.activities.map(act=>(
+            {data.activities.map((act,idx)=>(
               <div key={act.id} className={`activity ${editingId===act.id?'editing':''}`}>
                 <div className="act-view">
                   <div className="av-time">{act.time}</div>
@@ -440,6 +499,10 @@ export default function RunSheetPage() {
                     </div>
                   </div>
                   <div className="av-actions">
+                    <div className="av-move-row">
+                      <button className="move-btn" onClick={()=>moveActivity(act.id,-1)} disabled={idx===0}>↑</button>
+                      <button className="move-btn" onClick={()=>moveActivity(act.id,1)} disabled={idx===data.activities.length-1}>↓</button>
+                    </div>
                     <button className="edit-btn" onClick={()=>editingId===act.id?setEditingId(null):startEdit(act)}>✏ Edit</button>
                     <button className="del-btn" onClick={()=>deleteActivity(act.id)}>🗑</button>
                   </div>
