@@ -22,6 +22,11 @@ export interface TermRow {
   assistantPatrol: string;
   consentRequired: boolean;
   rowType: 'session' | 'extra';
+  multiDay?: boolean;
+  eventName?: string;
+  coLeaders?: string;
+  guestLeaders?: string;
+  helperParents?: string;
 }
 
 export interface ActivityRow {

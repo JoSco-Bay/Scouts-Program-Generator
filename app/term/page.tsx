@@ -9,6 +9,7 @@ import {
   loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
   loadMembers, replaceMembers,
 } from "@/lib/db";
+import type { RunSheetEntry } from "@/lib/db";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
@@ -76,7 +77,6 @@ export default function TermPage() {
   const [endDate, setEndDate]     = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termEndDate')||'') : ''));
   const [termName, setTermName]   = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termName')||'Term 2, 2026') : 'Term 2, 2026'));
   const [rows, setRows]           = useState<TermRow[]>([]);
-  const [fullMembers, setFullMembers] = useState<Member[]>([]);
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editDraft, setEditDraft] = useState<Partial<TermRow>>({});
   const [memberNames, setMemberNames] = useState<string[]>([]);
@@ -87,6 +87,8 @@ export default function TermPage() {
   );
   const [showColPicker, setShowColPicker]   = useState(false);
   const [showThemePanel, setShowThemePanel] = useState(false);
+  const [showMultiDayPanel, setShowMultiDayPanel] = useState(false);
+  const [multiDayDraft, setMultiDayDraft] = useState({eventName:'',startDate:'',endDate:'',location:'',oasFocus:'',notes:'',consentRequired:false});
   const [selectedOAS, setSelectedOAS]       = useState<string[]>([]);
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
@@ -134,7 +136,6 @@ export default function TermPage() {
         const cached = localStorage.getItem('programRows');
         if (cached) try { const r = JSON.parse(cached); setRows(r); setDatesSet(r.length > 0); } catch {}
       }
-      setFullMembers(members);
       setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
       setDbLoading(false);
     }
@@ -223,6 +224,46 @@ export default function TermPage() {
     const updated = sortByDate([...rows,nr]); saveRows(updated); setEditingId(nr.id); setEditDraft({...nr});
   };
 
+  const addMultiDayEvent = () => {
+    const { eventName, startDate: mdStart, endDate: mdEnd, location, oasFocus, notes, consentRequired } = multiDayDraft;
+    const name = eventName.trim();
+    if (!name || !mdStart || !mdEnd) return;
+    const start = new Date(mdStart);
+    const end = new Date(mdEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return;
+
+    const dayRows: TermRow[] = [];
+    const cur = new Date(start);
+    let dayNum = 1;
+    while (cur <= end) {
+      dayRows.push({
+        id: genId(),
+        date: cur.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'}),
+        time: '',
+        topic: `${name} — Day ${dayNum}`,
+        eventName: name,
+        multiDay: true,
+        location: location||'',
+        oasFocus: oasFocus||'',
+        sessionNotes: notes||'',
+        bring: '',
+        leader: config?.leaders[0]||'',
+        assistantPatrol: '',
+        coLeaders: '',
+        guestLeaders: '',
+        helperParents: '',
+        consentRequired: !!consentRequired,
+        rowType: 'extra',
+      });
+      cur.setDate(cur.getDate()+1);
+      dayNum++;
+    }
+
+    saveRows(sortByDate([...rows, ...dayRows]));
+    setShowMultiDayPanel(false);
+    setMultiDayDraft({eventName:'',startDate:'',endDate:'',location:'',oasFocus:'',notes:'',consentRequired:false});
+  };
+
   const MOVE_CONTENT_FIELDS = ['topic','location','oasFocus','sessionNotes','bring','leader','assistantPatrol','consentRequired','rowType'] as const;
 
   const moveRow = (id: string, dir: -1|1) => {
@@ -246,13 +287,28 @@ export default function TermPage() {
   const updateExtraEventDraft = (i: number, field: string, value: string|boolean) => setExtraEventsDraft(d=>d.map((e,idx)=>idx===i?{...e,[field]:value}:e));
   const removeExtraEventDraft = (i: number) => setExtraEventsDraft(d=>d.filter((_,idx)=>idx!==i));
 
-  const downloadPlan = () => {
+  const downloadPlan = async () => {
+    // Fetch a fresh members snapshot rather than trusting the fullMembers state, which
+    // only reflects whatever was loaded when this page first mounted — members edited
+    // on the Members tab since then wouldn't otherwise make it into the download.
+    // loadMembers already applies the Supabase-first, localStorage-fallback priority.
+    const currentMembers = await loadMembers('');
+
+    let runsheets: Record<string, RunSheetEntry> = {};
+    try {
+      const raw = localStorage.getItem('runsheets');
+      if (raw) runsheets = JSON.parse(raw);
+    } catch (e) {
+      console.error('Failed to read run sheets cache for download:', e);
+    }
+
     const payload = {
       type: PLAN_FILE_TYPE,
       version: 1,
       savedAt: new Date().toISOString(),
       termName, startDate, endDate, config, rows,
-      members: fullMembers,
+      members: currentMembers,
+      runsheets,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
@@ -296,7 +352,7 @@ export default function TermPage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      let data: { type?: string; termName?: string; startDate?: string; endDate?: string; config?: GroupConfig; rows?: TermRow[]; members?: Member[] };
+      let data: { type?: string; termName?: string; startDate?: string; endDate?: string; config?: GroupConfig; rows?: TermRow[]; members?: Member[]; runsheets?: Record<string, RunSheetEntry> };
       try {
         data = JSON.parse(ev.target?.result as string);
       } catch {
@@ -340,7 +396,6 @@ export default function TermPage() {
       }
 
       if (data.members) {
-        setFullMembers(data.members);
         setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
         if (activeGroupId) {
           await replaceMembers('', activeGroupId, data.members);
@@ -348,6 +403,19 @@ export default function TermPage() {
           if (verify.length !== data.members.length) syncFailed = true;
         } else {
           syncFailed = true;
+        }
+      }
+
+      if (data.runsheets) {
+        // Run sheets are localStorage-only (see CLAUDE.md) — merge the uploaded snapshot
+        // into the existing cache rather than replacing it, so run sheets for other
+        // sessions/groups already on this device aren't wiped out by this restore.
+        try {
+          const raw = localStorage.getItem('runsheets');
+          const existing: Record<string, RunSheetEntry> = raw ? JSON.parse(raw) : {};
+          localStorage.setItem('runsheets', JSON.stringify({ ...existing, ...data.runsheets }));
+        } catch (err) {
+          console.error('Failed to restore run sheets from uploaded plan:', err);
         }
       }
 
@@ -402,7 +470,13 @@ export default function TermPage() {
   };
 
   const openRunSheet = (row: TermRow) => {
-    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true}));
+    let multiDayInfo: { eventName: string; dayNumber: number; totalDays: number; location: string } | undefined;
+    if (row.multiDay && row.eventName) {
+      const eventRows = sortByDate(rows.filter(r=>r.eventName===row.eventName));
+      const dayNumber = eventRows.findIndex(r=>r.id===row.id) + 1;
+      multiDayInfo = { eventName: row.eventName, dayNumber: dayNumber||1, totalDays: eventRows.length, location: row.location };
+    }
+    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true, multiDayInfo}));
     router.push('/runsheet');
   };
 
@@ -613,6 +687,7 @@ export default function TermPage() {
             <div className="tl">
               <button className="tbtn" onClick={()=>addRow('session')}>+ Add week</button>
               <button className="tbtn" onClick={()=>addRow('extra')}>+ Special event</button>
+              <button className={`tbtn ${showMultiDayPanel?'active':''}`} onClick={()=>setShowMultiDayPanel(s=>!s)}>+ Multi-day event</button>
               <button className={`tbtn ${showThemePanel?'active':''}`} onClick={()=>setShowThemePanel(s=>!s)}>
                 ✦ AI suggest themes
               </button>
@@ -691,6 +766,46 @@ export default function TermPage() {
                 <button className="cancel-btn" onClick={()=>setShowThemePanel(false)}>Cancel</button>
               </div>
               {aiError && <div className="ai-error">⚠ {aiError}</div>}
+            </div>
+          )}
+
+          {showMultiDayPanel && (
+            <div className="theme-panel">
+              <div className="theme-panel-head">
+                <div>
+                  <div className="theme-panel-title">Add a multi-day event</div>
+                  <div className="theme-panel-desc">Creates one row per day (e.g. a weekend camp) — each day gets its own run sheet, and the AI knows it&apos;s part of a multi-day event when generating content.</div>
+                </div>
+                <button className="close-x" onClick={()=>setShowMultiDayPanel(false)}>✕</button>
+              </div>
+              <div className="ef3">
+                <div><div className="efl">Event name</div><input className="efi" value={multiDayDraft.eventName} onChange={e=>setMultiDayDraft(d=>({...d,eventName:e.target.value}))} placeholder="e.g. Winter Camp"/></div>
+                <div><div className="efl">Start date</div><input className="efi" type="date" value={multiDayDraft.startDate} onChange={e=>setMultiDayDraft(d=>({...d,startDate:e.target.value}))}/></div>
+                <div><div className="efl">End date</div><input className="efi" type="date" value={multiDayDraft.endDate} onChange={e=>setMultiDayDraft(d=>({...d,endDate:e.target.value}))}/></div>
+              </div>
+              <div className="ef3">
+                <div><div className="efl">Location</div><input className="efi" value={multiDayDraft.location} onChange={e=>setMultiDayDraft(d=>({...d,location:e.target.value}))} placeholder="e.g. Camp Kilcoy"/></div>
+                <div><div className="efl">OAS focus</div><input className="efi" value={multiDayDraft.oasFocus} onChange={e=>setMultiDayDraft(d=>({...d,oasFocus:e.target.value}))} placeholder="e.g. Camping S2"/></div>
+                <div style={{display:'flex',alignItems:'flex-end'}}>
+                  <label className="ef-check">
+                    <input type="checkbox" style={{accentColor:acc}} checked={multiDayDraft.consentRequired} onChange={e=>setMultiDayDraft(d=>({...d,consentRequired:e.target.checked}))}/>
+                    Consent required
+                  </label>
+                </div>
+              </div>
+              <div style={{marginBottom:'8px'}}>
+                <div className="efl" style={{marginBottom:'3px'}}>Notes — context for AI run sheet generation</div>
+                <textarea className="efi" style={{resize:'vertical',minHeight:'60px',width:'100%',lineHeight:'1.55'}}
+                  value={multiDayDraft.notes} onChange={e=>setMultiDayDraft(d=>({...d,notes:e.target.value}))}
+                  placeholder="e.g. Theme is bushcraft skills. Arriving Friday evening, departing Sunday after lunch."/>
+              </div>
+              <div className="tp-actions">
+                <button className="save-btn" style={{background:acc}} onClick={addMultiDayEvent}
+                  disabled={!multiDayDraft.eventName.trim()||!multiDayDraft.startDate||!multiDayDraft.endDate}>
+                  + Create day rows
+                </button>
+                <button className="cancel-btn" onClick={()=>setShowMultiDayPanel(false)}>Cancel</button>
+              </div>
             </div>
           )}
 

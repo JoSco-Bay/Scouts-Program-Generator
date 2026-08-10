@@ -12,11 +12,19 @@ const CHALLENGE_ICONS: Record<string,string> = {
   Community: '🤝', Outdoor: '🌿', Creative: '🎨', Personal: '⭐',
 };
 
+interface MultiDayInfo {
+  eventName: string;
+  dayNumber: number;
+  totalDays: number;
+  location: string;
+}
+
 interface RunSheetSource {
   row: TermRow;
   config: GroupConfig;
   isTermRow?: boolean;
   runSheetDbId?: string;
+  multiDayInfo?: MultiDayInfo;
 }
 
 function genId(){ return Math.random().toString(36).slice(2,9); }
@@ -135,13 +143,13 @@ export default function RunSheetPage() {
     try {
       const res = await fetch('/api/generate-runsheet',{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ row: activeRow, config: activeConfig }),
+        body: JSON.stringify({ row: activeRow, config: activeConfig, multiDayInfo: source?.multiDayInfo }),
       });
       if (!res.ok){ const text=await res.text(); throw new Error(`API error ${res.status}: ${text.slice(0,200)}`); }
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       if (!json.activities || !Array.isArray(json.activities)) throw new Error('No activities returned from AI');
-      const updatedSource: RunSheetSource = { row: activeRow, config: activeConfig, isTermRow: source?.isTermRow };
+      const updatedSource: RunSheetSource = { row: activeRow, config: activeConfig, isTermRow: source?.isTermRow, multiDayInfo: source?.multiDayInfo };
       setSource(updatedSource);
       setData(json);
       setGenerated(true);
@@ -449,11 +457,17 @@ export default function RunSheetPage() {
               <div className="sheet-title">{row?.topic}</div>
               {data.tagline && <div className="sheet-tagline">{data.tagline}</div>}
               <div className="sheet-meta">{groupConfig?.groupName} · {groupConfig?.section} · {row?.date}</div>
+              {source?.multiDayInfo && (
+                <div className="sheet-meta">🏕 {source.multiDayInfo.eventName} — Day {source.multiDayInfo.dayNumber} of {source.multiDayInfo.totalDays}</div>
+              )}
               <div className="sheet-pills">
                 {row?.time && <span className="pill">⏰ {row.time}</span>}
                 {row?.location && <span className="pill">📍 {row.location}</span>}
-                {row?.leader && <span className="pill">👤 {row.leader}</span>}
+                {row?.leader && <span className="pill">👤 Leader: {row.leader}</span>}
+                {row?.coLeaders && <span className="pill">🤝 Co-leaders: {row.coLeaders}</span>}
+                {row?.guestLeaders && <span className="pill">🌟 Guest/Region: {row.guestLeaders}</span>}
                 {row?.assistantPatrol && <span className="pill">🎖 Asst: {row.assistantPatrol}</span>}
+                {row?.helperParents && <span className="pill">👪 Helpers: {row.helperParents}</span>}
                 {row?.oasFocus && <span className="pill acc">⚜ {row.oasFocus}</span>}
               </div>
             </div>
