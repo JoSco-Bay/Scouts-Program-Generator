@@ -101,6 +101,8 @@ export default function MembersPage() {
         loadMembers(""),
       ]);
       if (grp) { setGroupId(grp.id); setConfig(grp.config); }
+      console.log('[members/page] raw localStorage[\'members\']:', localStorage.getItem('members'));
+      console.log('[members/page] loadMembers() resolved to', memberData.length, 'member(s):', memberData);
       setRows(termRows);
       setMembers(memberData);
       setDbLoading(false);
