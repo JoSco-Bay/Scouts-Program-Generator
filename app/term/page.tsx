@@ -895,6 +895,7 @@ export default function TermPage() {
                                   const cfgMembers = (config?.members||[]).filter(Boolean);
                                   const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames].map(n=>n.trim()))].filter(Boolean);
                                   const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
+                                  const coSelected = (editDraft.coLeaders||'').split(',').map(s=>s.trim()).filter(Boolean);
                                   return (<>
                                     <div><div className="efl">Leader</div>
                                       <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}>
@@ -928,6 +929,48 @@ export default function TermPage() {
                                         }
                                       </div>
                                     </div>
+                                    {editDraft.multiDay && (
+                                      <>
+                                        <div><div className="efl">Co-leaders</div>
+                                          <div className="ap-checklist">
+                                            {allPeople.length===0
+                                              ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
+                                              : allPeople.map(name=>(
+                                                  <label key={name} className="ap-check-row">
+                                                    <input type="checkbox"
+                                                      checked={coSelected.includes(name)}
+                                                      style={{accentColor:acc}}
+                                                      onChange={e=>{
+                                                        const ticked = e.target.checked;
+                                                        setEditDraft(d=>{
+                                                          const parts = (d.coLeaders||'').split(',').map(s=>s.trim()).filter(Boolean);
+                                                          const next = ticked ? [...new Set([...parts,name])] : parts.filter(p=>p!==name);
+                                                          const nextDraft = {...d,coLeaders:next.join(', ')};
+                                                          commitEditDraft(nextDraft);
+                                                          return nextDraft;
+                                                        });
+                                                      }}
+                                                    />
+                                                    {name}
+                                                  </label>
+                                                ))
+                                            }
+                                          </div>
+                                        </div>
+                                        <div><div className="efl">Guest / Region leaders</div>
+                                          <input className="efi" value={editDraft.guestLeaders||''}
+                                            onChange={e=>setEditDraft(d=>({...d,guestLeaders:e.target.value}))}
+                                            onBlur={()=>commitEditDraft(editDraft)}
+                                            placeholder="Names not in the regular leader list"/>
+                                        </div>
+                                        <div><div className="efl">Helper parents</div>
+                                          <input className="efi" value={editDraft.helperParents||''}
+                                            onChange={e=>setEditDraft(d=>({...d,helperParents:e.target.value}))}
+                                            onBlur={()=>commitEditDraft(editDraft)}
+                                            placeholder="Names of parents helping out"/>
+                                        </div>
+                                      </>
+                                    )}
                                   </>);
                                 })()}
                               </div>

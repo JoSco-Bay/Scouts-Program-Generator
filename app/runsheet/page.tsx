@@ -527,6 +527,10 @@ export default function RunSheetPage() {
                     <div><div className="ef-label">Activity name</div><input className="ef-input" value={editDraft.name||''} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))}/></div>
                   </div>
                   <div style={{marginBottom:'8px'}}>
+                    <div className="ef-label">OAS tag</div>
+                    <input className="ef-input" value={editDraft.oasTag||''} onChange={e=>setEditDraft(d=>({...d,oasTag:e.target.value}))} placeholder="e.g. Bushcraft S1 (leave blank if none)"/>
+                  </div>
+                  <div style={{marginBottom:'8px'}}>
                     <div className="ef-label">Detail — instructions, equipment, sub-steps</div>
                     <textarea className="ef-textarea" value={editDraft.detail||''} onChange={e=>setEditDraft(d=>({...d,detail:e.target.value}))}/>
                   </div>
