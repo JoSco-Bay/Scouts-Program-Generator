@@ -157,6 +157,17 @@ export async function upsertTermRows(_userId: string, groupId: string, rows: Ter
 const replaceTermRowsQueues = new Map<string, Promise<unknown>>();
 
 async function doReplaceTermRows(groupId: string, rows: TermRow[]): Promise<void> {
+  // run_sheets.term_row_id has a foreign key onto term_rows.id — deleting a term_row while
+  // a run sheet still references it fails with a FK violation (this is what breaks a plan
+  // upload once any session has a generated run sheet). Detach those run sheets first
+  // (term_row_id is nullable) rather than deleting them, so a leader's generated content
+  // survives as an unlinked run sheet instead of blocking the replace or being destroyed.
+  const { error: detachError } = await supabase
+    .from('run_sheets')
+    .update({ term_row_id: null })
+    .eq('group_id', groupId);
+  if (detachError) throw detachError;
+
   // Delete, then verify the group is actually clear before inserting — a delete that
   // silently leaves rows behind must never let the new set coexist with the old one.
   for (let attempt = 0; ; attempt++) {
@@ -281,6 +292,17 @@ export async function upsertMembers(_userId: string, groupId: string, members: M
 const replaceMembersQueues = new Map<string, Promise<unknown>>();
 
 async function doReplaceMembers(groupId: string, members: Member[]): Promise<void> {
+  // members.id is the table's primary key, global across all groups — not scoped per
+  // group_id. If the same saved plan file (with the same baked-in member ids) is ever
+  // uploaded into a different group than it was originally seeded into, those ids can
+  // already exist under another group_id, and a plain insert hits a primary-key
+  // collision. Clear the incoming ids globally as well as clearing this group.
+  const incomingIds = members.map(m => m.id);
+  if (incomingIds.length) {
+    const { error: idClearError } = await supabase.from('members').delete().in('id', incomingIds);
+    if (idClearError) throw idClearError;
+  }
+
   for (let attempt = 0; ; attempt++) {
     const { error: delError } = await supabase.from('members').delete().eq('group_id', groupId);
     if (delError) throw delError;
