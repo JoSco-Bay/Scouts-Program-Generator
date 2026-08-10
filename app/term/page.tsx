@@ -397,6 +397,11 @@ export default function TermPage() {
 
       if (data.members) {
         setMemberNames(data.members.map((m: Member) => `${m.firstName} ${m.lastName}`));
+        // Write to localStorage unconditionally, before the Supabase call — same pattern
+        // as data.rows above — so members survive a cache clear only if Supabase already
+        // has them, and survive a Supabase outage because localStorage already has them
+        // regardless of whether the sync below succeeds.
+        localStorage.setItem('members', JSON.stringify(data.members));
         if (activeGroupId) {
           await replaceMembers('', activeGroupId, data.members);
           const verify = await loadMembers('');
