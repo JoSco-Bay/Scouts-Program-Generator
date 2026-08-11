@@ -364,8 +364,6 @@ export default function TermPage() {
         return;
       }
 
-      console.log('[handleUpload] parsed plan file — data.members exists:', !!data.members, '| length:', data.members?.length ?? 0, '| sample:', data.members?.[0]);
-
       if (data.termName) { setTermName(data.termName); localStorage.setItem('termName', data.termName); }
       if (data.startDate) setStartDate(data.startDate);
       if (data.endDate) setEndDate(data.endDate);
@@ -404,7 +402,6 @@ export default function TermPage() {
         // has them, and survive a Supabase outage because localStorage already has them
         // regardless of whether the sync below succeeds.
         localStorage.setItem('members', JSON.stringify(data.members));
-        console.log('[handleUpload] wrote to localStorage[\'members\'] —', data.members.length, 'member(s). Readback:', localStorage.getItem('members'));
         if (activeGroupId) {
           await replaceMembers('', activeGroupId, data.members);
           const verify = await loadMembers('');
