@@ -10,6 +10,7 @@ import {
   loadMembers, replaceMembers,
 } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
+import { saveEvent, deleteEvent } from "@/lib/events";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
@@ -51,6 +52,18 @@ function dateSortKey(row: TermRow, yearHint: number): number {
   if (!row.date) return Infinity;
   const parsed = Date.parse(`${row.date} ${yearHint}`);
   return isNaN(parsed) ? Infinity : parsed;
+}
+
+function formatDateRange(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const startMonth = start.toLocaleDateString('en-AU',{month:'short'});
+  const endMonth = end.toLocaleDateString('en-AU',{month:'short'});
+  if (startIso === endIso) return `${startDay} ${startMonth}`;
+  if (startMonth === endMonth) return `${startDay}–${endDay} ${endMonth}`;
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
 }
 
 // ── Tooltip component (replaces dangerouslySetInnerHTML) ──────────────────────
@@ -214,6 +227,8 @@ export default function TermPage() {
 
   const deleteRow = async (id: string) => {
     if (!confirm('Remove this row?')) return;
+    const row = rows.find(r=>r.id===id);
+    if (row?.rowType === 'multiday') deleteEvent(id);
     setRows(r => r.filter(x => x.id !== id));
     try { await deleteTermRow('', id); }
     catch (e) { console.error('Term row delete failed:', e); }
@@ -232,34 +247,29 @@ export default function TermPage() {
     const end = new Date(mdEnd);
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return;
 
-    const dayRows: TermRow[] = [];
-    const cur = new Date(start);
-    let dayNum = 1;
-    while (cur <= end) {
-      dayRows.push({
-        id: genId(),
-        date: cur.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'}),
-        time: '',
-        topic: `${name} — Day ${dayNum}`,
-        eventName: name,
-        multiDay: true,
-        location: location||'',
-        oasFocus: oasFocus||'',
-        sessionNotes: notes||'',
-        bring: '',
-        leader: config?.leaders[0]||'',
-        assistantPatrol: '',
-        coLeaders: '',
-        guestLeaders: '',
-        helperParents: '',
-        consentRequired: !!consentRequired,
-        rowType: 'extra',
-      });
-      cur.setDate(cur.getDate()+1);
-      dayNum++;
-    }
+    const id = genId();
+    const newRow: TermRow = {
+      id,
+      date: start.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'}),
+      time: '',
+      topic: `${name} · ${formatDateRange(mdStart, mdEnd)}`,
+      location: location||'',
+      oasFocus: oasFocus||'',
+      sessionNotes: notes||'',
+      bring: '',
+      leader: '',
+      assistantPatrol: '',
+      consentRequired: !!consentRequired,
+      rowType: 'multiday',
+    };
 
-    saveRows(sortByDate([...rows, ...dayRows]));
+    saveEvent({
+      id, eventName: name, startDate: mdStart, endDate: mdEnd,
+      location: location||'', oasFocus: oasFocus||'', notes: notes||'', consentRequired: !!consentRequired,
+      leader: '', coLeaders: '', guestLeaders: '', helperParents: '',
+    });
+
+    saveRows(sortByDate([...rows, newRow]));
     setShowMultiDayPanel(false);
     setMultiDayDraft({eventName:'',startDate:'',endDate:'',location:'',oasFocus:'',notes:'',consentRequired:false});
   };
@@ -475,14 +485,12 @@ export default function TermPage() {
   };
 
   const openRunSheet = (row: TermRow) => {
-    let multiDayInfo: { eventName: string; dayNumber: number; totalDays: number; location: string } | undefined;
-    if (row.multiDay && row.eventName) {
-      const eventRows = sortByDate(rows.filter(r=>r.eventName===row.eventName));
-      const dayNumber = eventRows.findIndex(r=>r.id===row.id) + 1;
-      multiDayInfo = { eventName: row.eventName, dayNumber: dayNumber||1, totalDays: eventRows.length, location: row.location };
-    }
-    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true, multiDayInfo}));
+    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true}));
     router.push('/runsheet');
+  };
+
+  const openEventPlanner = (row: TermRow) => {
+    router.push(`/events/${row.id}`);
   };
 
   const sessionCount = rows.filter(r=>r.rowType==='session').length;
@@ -561,6 +569,7 @@ export default function TermPage() {
         th{padding:8px 9px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#1E3A5F;white-space:nowrap;}
         tbody tr.session td{background:${pale};}
         tbody tr.extra td{background:#fff;}
+        tbody tr.multiday td{background:#eef2ff;}
         tbody tr.editing td{background:rgba(193,127,36,0.05)!important;}
         td{padding:8px 9px;border-bottom:1px solid #f3f4f6;vertical-align:top;line-height:1.45;color:#111827;}
         tbody tr:hover td{filter:brightness(0.98);}
@@ -779,7 +788,7 @@ export default function TermPage() {
               <div className="theme-panel-head">
                 <div>
                   <div className="theme-panel-title">Add a multi-day event</div>
-                  <div className="theme-panel-desc">Creates one row per day (e.g. a weekend camp) — each day gets its own run sheet, and the AI knows it&apos;s part of a multi-day event when generating content.</div>
+                  <div className="theme-panel-desc">Adds one row for the whole event (e.g. a weekend camp) — plan staffing and generate each day&apos;s run sheet from a dedicated event page.</div>
                 </div>
                 <button className="close-x" onClick={()=>setShowMultiDayPanel(false)}>✕</button>
               </div>
@@ -807,7 +816,7 @@ export default function TermPage() {
               <div className="tp-actions">
                 <button className="save-btn" style={{background:acc}} onClick={addMultiDayEvent}
                   disabled={!multiDayDraft.eventName.trim()||!multiDayDraft.startDate||!multiDayDraft.endDate}>
-                  + Create day rows
+                  + Create event
                 </button>
                 <button className="cancel-btn" onClick={()=>setShowMultiDayPanel(false)}>Cancel</button>
               </div>
@@ -836,7 +845,7 @@ export default function TermPage() {
                 <tbody>
                   {rows.map((row,idx)=>(
                     <Fragment key={row.id}>
-                      <tr className={`${row.rowType==='session'?'session':'extra'} ${editingId===row.id?'editing':''}`}>
+                      <tr className={`${row.rowType==='session'?'session':row.rowType==='multiday'?'multiday':'extra'} ${editingId===row.id?'editing':''}`}>
                         {activeCols.map(c=>{
                           if (c.key==='date') return <td key="date" style={{width:c.width}}><div className="dm">{row.date}</div><div className="dt">{row.time}</div></td>;
                           if (c.key==='topic') return (
@@ -866,8 +875,14 @@ export default function TermPage() {
                               <button className="move-btn" onClick={()=>moveRow(row.id,-1)} disabled={idx===0}>↑</button>
                               <button className="move-btn" onClick={()=>moveRow(row.id,1)} disabled={idx===rows.length-1}>↓</button>
                             </div>
-                            <button className="edit-btn" onClick={()=>editingId===row.id?setEditingId(null):startEdit(row)}>✏ Edit</button>
-                            <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
+                            {row.rowType==='multiday' ? (
+                              <button className="create-btn" onClick={()=>openEventPlanner(row)}>📅 Plan event</button>
+                            ) : (
+                              <>
+                                <button className="edit-btn" onClick={()=>editingId===row.id?setEditingId(null):startEdit(row)}>✏ Edit</button>
+                                <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
+                              </>
+                            )}
                             <button className="del-btn" onClick={()=>deleteRow(row.id)}>🗑 delete</button>
                           </div>
                         </td>
@@ -900,7 +915,6 @@ export default function TermPage() {
                                   const cfgMembers = (config?.members||[]).filter(Boolean);
                                   const allPeople = [...new Set([...cfgLeaders,...cfgMembers,...memberNames].map(n=>n.trim()))].filter(Boolean);
                                   const selected = (editDraft.assistantPatrol||'').split(',').map(s=>s.trim()).filter(Boolean);
-                                  const coSelected = (editDraft.coLeaders||'').split(',').map(s=>s.trim()).filter(Boolean);
                                   return (<>
                                     <div><div className="efl">Leader</div>
                                       <select className="efi" value={editDraft.leader||''} onChange={e=>setEditDraft(d=>({...d,leader:e.target.value}))} onBlur={()=>commitEditDraft(editDraft)}>
@@ -934,48 +948,6 @@ export default function TermPage() {
                                         }
                                       </div>
                                     </div>
-                                    {editDraft.multiDay && (
-                                      <>
-                                        <div><div className="efl">Co-leaders</div>
-                                          <div className="ap-checklist">
-                                            {allPeople.length===0
-                                              ? <span style={{fontSize:'11px',color:'#9ca3af'}}>No members loaded</span>
-                                              : allPeople.map(name=>(
-                                                  <label key={name} className="ap-check-row">
-                                                    <input type="checkbox"
-                                                      checked={coSelected.includes(name)}
-                                                      style={{accentColor:acc}}
-                                                      onChange={e=>{
-                                                        const ticked = e.target.checked;
-                                                        setEditDraft(d=>{
-                                                          const parts = (d.coLeaders||'').split(',').map(s=>s.trim()).filter(Boolean);
-                                                          const next = ticked ? [...new Set([...parts,name])] : parts.filter(p=>p!==name);
-                                                          const nextDraft = {...d,coLeaders:next.join(', ')};
-                                                          commitEditDraft(nextDraft);
-                                                          return nextDraft;
-                                                        });
-                                                      }}
-                                                    />
-                                                    {name}
-                                                  </label>
-                                                ))
-                                            }
-                                          </div>
-                                        </div>
-                                        <div><div className="efl">Guest / Region leaders</div>
-                                          <input className="efi" value={editDraft.guestLeaders||''}
-                                            onChange={e=>setEditDraft(d=>({...d,guestLeaders:e.target.value}))}
-                                            onBlur={()=>commitEditDraft(editDraft)}
-                                            placeholder="Names not in the regular leader list"/>
-                                        </div>
-                                        <div><div className="efl">Helper parents</div>
-                                          <input className="efi" value={editDraft.helperParents||''}
-                                            onChange={e=>setEditDraft(d=>({...d,helperParents:e.target.value}))}
-                                            onBlur={()=>commitEditDraft(editDraft)}
-                                            placeholder="Names of parents helping out"/>
-                                        </div>
-                                      </>
-                                    )}
                                   </>);
                                 })()}
                               </div>

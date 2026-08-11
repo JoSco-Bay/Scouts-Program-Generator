@@ -21,12 +21,31 @@ export interface TermRow {
   leader: string;
   assistantPatrol: string;
   consentRequired: boolean;
-  rowType: 'session' | 'extra';
-  multiDay?: boolean;
-  eventName?: string;
+  rowType: 'session' | 'extra' | 'multiday';
+  // Only ever set on the synthetic per-day row built by app/events/[id]/page.tsx when
+  // opening a run sheet for one day of a multi-day event — never persisted on a real
+  // term_rows record.
   coLeaders?: string;
   guestLeaders?: string;
   helperParents?: string;
+}
+
+// A multi-day event is represented in the term plan by a single TermRow with
+// rowType 'multiday'. The full event details (staffing, notes) live here, in
+// localStorage['events'] keyed by that row's id — see lib/events.ts.
+export interface EventData {
+  id: string;
+  eventName: string;
+  startDate: string; // ISO yyyy-mm-dd
+  endDate: string;   // ISO yyyy-mm-dd
+  location: string;
+  oasFocus: string;
+  notes: string;
+  consentRequired: boolean;
+  leader: string;
+  coLeaders: string;
+  guestLeaders: string;
+  helperParents: string;
 }
 
 export interface ActivityRow {
