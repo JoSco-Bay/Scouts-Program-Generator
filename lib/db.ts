@@ -435,6 +435,20 @@ export async function loadRunSheetById(dbId: string): Promise<SavedRunSheet | nu
   }
 }
 
+export async function deleteRunSheet(_userId: string, dbId: string, rowId: string): Promise<void> {
+  try {
+    const { error } = await supabase.from('run_sheets').delete().eq('id', dbId);
+    if (error) throw error;
+  } catch (e) {
+    console.error('Supabase run sheet delete failed:', e);
+  }
+  // Always remove from localStorage — it's the primary store of record for run sheets
+  // (see CLAUDE.md), so the deletion must stick even if the Supabase call failed.
+  const cache = getRunSheetsCache();
+  delete cache[rowId];
+  setRunSheetsCache(cache);
+}
+
 export async function saveRunSheet(
   _userId: string,
   groupId: string,

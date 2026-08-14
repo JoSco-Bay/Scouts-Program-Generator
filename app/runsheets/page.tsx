@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig } from "@/lib/types";
-import { loadGroupRecord, loadRunSheets } from "@/lib/db";
+import { loadGroupRecord, loadRunSheets, deleteRunSheet } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
 
 export default function RunSheetsPage() {
@@ -59,6 +59,13 @@ export default function RunSheetsPage() {
     router.push('/runsheet');
   };
 
+  const deleteSheet = async (sheet: RunSheetEntry) => {
+    if (!confirm('Delete this run sheet?')) return;
+    const rowId = sheet.entry?.row?.id;
+    await deleteRunSheet('', sheet.dbId, rowId || '');
+    setSheets(prev => prev.filter(s => s.dbId !== sheet.dbId));
+  };
+
   if (dbLoading) return null;
 
   return (
@@ -89,6 +96,9 @@ export default function RunSheetsPage() {
         .rs-oas{display:inline-flex;align-items:center;gap:4px;font-size:11px;background:#eef1f9;color:${NAVY};border:1px solid #c5cedf;border-radius:3px;padding:2px 7px;}
         .view-btn{font-size:12px;padding:7px 16px;border-radius:6px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;flex-shrink:0;}
         .view-btn:hover{background:${pale};}
+        .rs-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+        .delete-btn{font-size:12px;padding:7px 16px;border-radius:6px;border:1px solid #d1d5db;color:#6b7280;background:transparent;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;}
+        .delete-btn:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626;}
         .empty-state{text-align:center;padding:64px 0;color:#9ca3af;}
         .empty-icon{font-size:40px;margin-bottom:14px;}
         .empty-title{font-size:16px;font-weight:600;color:#374151;margin-bottom:6px;}
@@ -138,7 +148,10 @@ export default function RunSheetsPage() {
                   <div className="rs-topic">{sheet.entry?.row?.topic||'Untitled session'}</div>
                   {sheet.entry?.row?.oasFocus&&<span className="rs-oas">⚜ {sheet.entry.row.oasFocus}</span>}
                 </div>
-                <button className="view-btn" onClick={()=>viewSheet(sheet)}>View →</button>
+                <div className="rs-actions">
+                  <button className="view-btn" onClick={()=>viewSheet(sheet)}>View →</button>
+                  <button className="delete-btn" onClick={()=>deleteSheet(sheet)}>Delete</button>
+                </div>
               </div>
             ))}
           </div>
