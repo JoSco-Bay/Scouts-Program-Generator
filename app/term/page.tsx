@@ -2,7 +2,7 @@
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, TermRow, Member } from "@/lib/types";
+import type { GroupConfig, TermRow, Member, EventData } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import {
   loadGroupRecord, saveGroupConfig,
@@ -10,7 +10,7 @@ import {
   loadMembers, replaceMembers,
 } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
-import { saveEvent, deleteEvent } from "@/lib/events";
+import { loadEvent, saveEvent, deleteEvent } from "@/lib/events";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
@@ -92,6 +92,7 @@ export default function TermPage() {
   const [rows, setRows]           = useState<TermRow[]>([]);
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editDraft, setEditDraft] = useState<Partial<TermRow>>({});
+  const [multiDayEditDraft, setMultiDayEditDraft] = useState<Partial<EventData>>({});
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [generating, setGenerating]   = useState(false);
   const [datesSet, setDatesSet]       = useState(false);
@@ -210,7 +211,18 @@ export default function TermPage() {
     return [...arr].sort((a,b)=>dateSortKey(a,yearHint)-dateSortKey(b,yearHint));
   }, [termName]);
 
-  const startEdit = (row: TermRow) => { setEditingId(row.id); setEditDraft({...row}); };
+  const startEdit = (row: TermRow) => {
+    setEditingId(row.id);
+    setEditDraft({...row});
+    if (row.rowType === 'multiday') {
+      const ev = loadEvent(row.id);
+      setMultiDayEditDraft(ev ? {...ev} : {
+        eventName: row.topic, startDate: '', endDate: '',
+        location: row.location, oasFocus: row.oasFocus, notes: row.sessionNotes,
+        consentRequired: row.consentRequired,
+      });
+    }
+  };
 
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout>|null>(null);
   const [savedMsg, setSavedMsg] = useState(false);
@@ -222,6 +234,30 @@ export default function TermPage() {
   const commitEditDraft = (draft: Partial<TermRow>) => {
     if (!editingId) return;
     saveRows(sortByDate(rows.map(r=>r.id===editingId?{...r,...draft} as TermRow:r)));
+    flashSaved();
+  };
+
+  const commitMultiDayEdit = (id: string, draft: Partial<EventData>) => {
+    const existing = loadEvent(id);
+    if (!existing) return;
+    const merged: EventData = {...existing, ...draft};
+    saveEvent(merged);
+    const startValid = merged.startDate && !isNaN(new Date(merged.startDate).getTime());
+    const endValid = merged.endDate && !isNaN(new Date(merged.endDate).getTime());
+    const name = merged.eventName.trim();
+    saveRows(sortByDate(rows.map(r=>{
+      if (r.id !== id) return r;
+      const next: TermRow = {
+        ...r,
+        location: merged.location,
+        oasFocus: merged.oasFocus,
+        sessionNotes: merged.notes,
+        consentRequired: merged.consentRequired,
+      };
+      if (name && startValid && endValid) next.topic = `${name} · ${formatDateRange(merged.startDate, merged.endDate)}`;
+      if (startValid) next.date = new Date(merged.startDate).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'});
+      return next;
+    })));
     flashSaved();
   };
 
@@ -875,19 +911,17 @@ export default function TermPage() {
                               <button className="move-btn" onClick={()=>moveRow(row.id,-1)} disabled={idx===0}>↑</button>
                               <button className="move-btn" onClick={()=>moveRow(row.id,1)} disabled={idx===rows.length-1}>↓</button>
                             </div>
+                            <button className="edit-btn" onClick={()=>editingId===row.id?setEditingId(null):startEdit(row)}>✏ Edit</button>
                             {row.rowType==='multiday' ? (
                               <button className="create-btn" onClick={()=>openEventPlanner(row)}>📅 Plan event</button>
                             ) : (
-                              <>
-                                <button className="edit-btn" onClick={()=>editingId===row.id?setEditingId(null):startEdit(row)}>✏ Edit</button>
-                                <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
-                              </>
+                              <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
                             )}
                             <button className="del-btn" onClick={()=>deleteRow(row.id)}>🗑 delete</button>
                           </div>
                         </td>
                       </tr>
-                      {editingId===row.id&&(
+                      {editingId===row.id && row.rowType!=='multiday' && (
                         <tr key={`${row.id}-edit`}>
                           <td colSpan={colSpanTotal} style={{padding:0,borderLeft:`3px solid ${acc}`}}>
                             <div className="edit-form">
@@ -966,6 +1000,46 @@ export default function TermPage() {
                                   <option value="session">Weekly session</option>
                                   <option value="extra">Extra event</option>
                                 </select>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {editingId===row.id && row.rowType==='multiday' && (
+                        <tr key={`${row.id}-edit`}>
+                          <td colSpan={colSpanTotal} style={{padding:0,borderLeft:`3px solid ${acc}`}}>
+                            <div className="edit-form">
+                              <div className="ef3">
+                                <div><div className="efl">Event name</div><input className="efi" value={multiDayEditDraft.eventName||''} onChange={e=>setMultiDayEditDraft(d=>({...d,eventName:e.target.value}))} onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)}/></div>
+                                <div><div className="efl">Start date</div><input className="efi" type="date" value={multiDayEditDraft.startDate||''} onChange={e=>setMultiDayEditDraft(d=>({...d,startDate:e.target.value}))} onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)}/></div>
+                                <div><div className="efl">End date</div><input className="efi" type="date" value={multiDayEditDraft.endDate||''} onChange={e=>setMultiDayEditDraft(d=>({...d,endDate:e.target.value}))} onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)}/></div>
+                              </div>
+                              <div className="ef3">
+                                <div><div className="efl">Location</div><input className="efi" value={multiDayEditDraft.location||''} onChange={e=>setMultiDayEditDraft(d=>({...d,location:e.target.value}))} onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)}/></div>
+                                <div><div className="efl">OAS focus</div><input className="efi" value={multiDayEditDraft.oasFocus||''} onChange={e=>setMultiDayEditDraft(d=>({...d,oasFocus:e.target.value}))} onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)} placeholder="e.g. Camping S2"/></div>
+                                <div style={{display:'flex',alignItems:'flex-end'}}>
+                                  <label className="ef-check">
+                                    <input type="checkbox" style={{accentColor:acc}} checked={multiDayEditDraft.consentRequired||false} onChange={e=>{
+                                      const nextDraft = {...multiDayEditDraft, consentRequired:e.target.checked};
+                                      setMultiDayEditDraft(nextDraft);
+                                      commitMultiDayEdit(row.id, nextDraft);
+                                    }}/>
+                                    Consent required
+                                  </label>
+                                </div>
+                              </div>
+                              <div style={{marginBottom:'8px'}}>
+                                <div className="efl" style={{marginBottom:'3px'}}>Notes — context for AI run sheet generation</div>
+                                <textarea className="efi" style={{resize:'vertical',minHeight:'60px',lineHeight:'1.55',width:'100%'}}
+                                  value={multiDayEditDraft.notes||''}
+                                  onChange={e=>setMultiDayEditDraft(d=>({...d,notes:e.target.value}))}
+                                  onBlur={()=>commitMultiDayEdit(row.id, multiDayEditDraft)}
+                                  placeholder="e.g. Theme is bushcraft skills. Arriving Friday evening, departing Sunday after lunch."/>
+                              </div>
+                              <div className="ef-actions">
+                                <button className="cancel-btn" onClick={()=>setEditingId(null)}>Close</button>
+                                <span className={`saved-flash ${savedMsg?'show':''}`}>Saved ✓</span>
+                                <button className="create-btn" style={{width:'auto',marginLeft:'auto'}} onClick={()=>openEventPlanner(row)}>📅 Plan event</button>
                               </div>
                             </div>
                           </td>

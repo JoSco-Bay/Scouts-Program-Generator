@@ -30,6 +30,17 @@ export interface TermRow {
   helperParents?: string;
 }
 
+// Per-day overrides within a multi-day event — e.g. Day 1's topic/notes differ from
+// Day 2's. Keyed by day number (1-indexed) on EventData.days.
+export interface EventDayDetails {
+  topic: string;
+  location: string;
+  oasFocus: string;
+  sessionNotes: string;
+  time: string;
+  bring: string;
+}
+
 // A multi-day event is represented in the term plan by a single TermRow with
 // rowType 'multiday'. The full event details (staffing, notes) live here, in
 // localStorage['events'] keyed by that row's id — see lib/events.ts.
@@ -46,6 +57,7 @@ export interface EventData {
   coLeaders: string;
   guestLeaders: string;
   helperParents: string;
+  days?: Record<number, EventDayDetails>;
 }
 
 export interface ActivityRow {

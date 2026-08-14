@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, EventData, TermRow } from "@/lib/types";
+import type { GroupConfig, EventData, EventDayDetails, TermRow } from "@/lib/types";
 import { loadGroupRecord } from "@/lib/db";
 import { loadEvent, saveEvent } from "@/lib/events";
 
@@ -19,6 +19,17 @@ function getDaysBetween(startIso: string, endIso: string): {date:Date; label:str
     cur.setDate(cur.getDate()+1);
   }
   return days;
+}
+
+function defaultDayDetails(event: EventData, dayNumber: number): EventDayDetails {
+  return {
+    topic: `${event.eventName} — Day ${dayNumber}`,
+    location: event.location,
+    oasFocus: event.oasFocus,
+    sessionNotes: event.notes,
+    time: '',
+    bring: '',
+  };
 }
 
 function formatDateRange(startIso: string, endIso: string): string {
@@ -71,18 +82,31 @@ export default function EventPlannerPage() {
   };
 
   const days = event ? getDaysBetween(event.startDate, event.endDate) : [];
+  const dayDetails = event ? (event.days?.[activeDay+1] ?? defaultDayDetails(event, activeDay+1)) : null;
+
+  // Updates local state immediately (so typing feels responsive) without persisting —
+  // persistence happens on blur via commitDay, matching the term plan's edit pattern.
+  const updateDayField = (dayNumber: number, field: keyof EventDayDetails, value: string) => {
+    setEvent(e => {
+      if (!e) return e;
+      const current = e.days?.[dayNumber] ?? defaultDayDetails(e, dayNumber);
+      return {...e, days: {...(e.days||{}), [dayNumber]: {...current, [field]: value}}};
+    });
+  };
+  const commitDay = () => { if (event) saveEvent(event); };
 
   const openDayRunSheet = (dayNumber: number, dayDate: Date) => {
     if (!event) return;
+    const details = event.days?.[dayNumber] ?? defaultDayDetails(event, dayNumber);
     const dayRow: TermRow = {
       id: `${event.id}-day-${dayNumber}`,
       date: formatDayLabel(dayDate),
-      time: '',
-      topic: `${event.eventName} — Day ${dayNumber}`,
-      location: event.location,
-      oasFocus: event.oasFocus,
-      sessionNotes: event.notes,
-      bring: '',
+      time: details.time,
+      topic: details.topic,
+      location: details.location,
+      oasFocus: details.oasFocus,
+      sessionNotes: details.sessionNotes,
+      bring: details.bring,
       leader: event.leader,
       assistantPatrol: '',
       coLeaders: event.coLeaders,
@@ -91,7 +115,7 @@ export default function EventPlannerPage() {
       consentRequired: event.consentRequired,
       rowType: 'extra',
     };
-    const multiDayInfo = { eventName: event.eventName, dayNumber, totalDays: days.length, location: event.location };
+    const multiDayInfo = { eventName: event.eventName, dayNumber, totalDays: days.length, location: details.location || event.location };
     localStorage.setItem('runSheetSource', JSON.stringify({ row: dayRow, config, isTermRow: false, multiDayInfo }));
     router.push('/runsheet');
   };
@@ -141,17 +165,20 @@ export default function EventPlannerPage() {
         .staff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         .field{display:flex;flex-direction:column;gap:4px;}
         .field label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;}
-        .field input{border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;color:#111827;font-family:inherit;outline:none;}
-        .field input:focus{border-color:${acc};}
+        .field input,.field textarea{border:1px solid #d1d5db;border-radius:6px;padding:8px 10px;font-size:13px;color:#111827;font-family:inherit;outline:none;}
+        .field input:focus,.field textarea:focus{border-color:${acc};}
+        .field textarea{resize:vertical;min-height:70px;line-height:1.5;}
         .day-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:12px 14px;border-bottom:1px solid #f3f4f6;background:#fafaf9;}
         .day-tab{font-size:12px;padding:7px 14px;border-radius:6px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;font-family:inherit;font-weight:500;}
         .day-tab:hover{border-color:${acc};color:${acc};}
         .day-tab.on{background:${acc};border-color:${acc};color:#fff;}
-        .day-panel{padding:20px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+        .day-panel{padding:20px 18px;}
+        .day-panel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;}
         .day-panel-date{font-size:14px;font-weight:600;color:#111827;}
-        .create-btn{font-size:13px;padding:9px 20px;border-radius:6px;border:none;background:${acc};color:#fff;cursor:pointer;font-family:inherit;font-weight:600;}
+        .day-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+        .create-btn{font-size:13px;padding:9px 20px;border-radius:6px;border:none;background:${acc};color:#fff;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;}
         .create-btn:hover{opacity:0.9;}
-        @media (max-width:640px){ .staff-grid{grid-template-columns:1fr;} }
+        @media (max-width:640px){ .staff-grid{grid-template-columns:1fr;} .day-fields{grid-template-columns:1fr;} }
       `}</style>
 
       <nav className="nav">
@@ -201,10 +228,41 @@ export default function EventPlannerPage() {
               </button>
             ))}
           </div>
-          {days[activeDay] && (
+          {days[activeDay] && dayDetails && (
             <div className="day-panel">
-              <div className="day-panel-date">Day {activeDay+1} — {days[activeDay].label}</div>
-              <button className="create-btn" onClick={()=>openDayRunSheet(activeDay+1, days[activeDay].date)}>Create run sheet</button>
+              <div className="day-panel-head">
+                <div className="day-panel-date">Day {activeDay+1} — {days[activeDay].label}</div>
+                <button className="create-btn" onClick={()=>openDayRunSheet(activeDay+1, days[activeDay].date)}>Create run sheet</button>
+              </div>
+              <div className="day-fields">
+                <div className="field">
+                  <label>Topic / theme</label>
+                  <input value={dayDetails.topic} onChange={e=>updateDayField(activeDay+1,'topic',e.target.value)} onBlur={commitDay}/>
+                </div>
+                <div className="field">
+                  <label>Location (within event)</label>
+                  <input value={dayDetails.location} onChange={e=>updateDayField(activeDay+1,'location',e.target.value)} onBlur={commitDay} placeholder="e.g. Main campsite"/>
+                </div>
+                <div className="field">
+                  <label>Start time</label>
+                  <input value={dayDetails.time} onChange={e=>updateDayField(activeDay+1,'time',e.target.value)} onBlur={commitDay} placeholder="e.g. 7:00am"/>
+                </div>
+              </div>
+              <div className="day-fields">
+                <div className="field">
+                  <label>OAS focus</label>
+                  <input value={dayDetails.oasFocus} onChange={e=>updateDayField(activeDay+1,'oasFocus',e.target.value)} onBlur={commitDay} placeholder="e.g. Camping S2"/>
+                </div>
+                <div className="field" style={{gridColumn:'span 2'}}>
+                  <label>Bring items</label>
+                  <input value={dayDetails.bring} onChange={e=>updateDayField(activeDay+1,'bring',e.target.value)} onBlur={commitDay} placeholder="e.g. Swimmers, sunscreen, water bottle"/>
+                </div>
+              </div>
+              <div className="field">
+                <label>Session notes — context for AI run sheet generation</label>
+                <textarea value={dayDetails.sessionNotes} onChange={e=>updateDayField(activeDay+1,'sessionNotes',e.target.value)} onBlur={commitDay}
+                  placeholder="e.g. Focus on knot-tying in the morning, free swim after lunch."/>
+              </div>
             </div>
           )}
         </div>
