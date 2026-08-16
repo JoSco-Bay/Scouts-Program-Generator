@@ -18,6 +18,7 @@ export default function HomePage() {
         .hero-title{font-size:clamp(38px,7vw,64px);font-weight:700;color:#111827;line-height:1.0;letter-spacing:-0.03em;margin-bottom:18px;}
         .hero-title em{font-style:italic;font-weight:400;color:#C17F24;}
         .hero-desc{font-size:17px;color:#6b7280;max-width:500px;margin:0 auto 36px;line-height:1.7;}
+        .hero-disclaimer{font-size:12px;color:#9ca3af;max-width:520px;margin:-24px auto 36px;line-height:1.6;}
         .hero-btns{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
         .btn-pri{display:inline-flex;align-items:center;gap:8px;background:#C17F24;color:#fff;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;transition:opacity 0.2s;}
         .btn-pri:hover{opacity:0.9;}
@@ -56,6 +57,7 @@ export default function HomePage() {
         <div className="hero-badge">⚜ Youth Program Builder · Term Planner & Run Sheet Generator</div>
         <h1 className="hero-title">Plan every<br/><em>Scout meeting.</em></h1>
         <p className="hero-desc">Build a full term schedule and generate detailed, ready-to-run meeting programs — with timed activity sheets, OAS badge goals, equipment lists, and leader notes.</p>
+        <p className="hero-disclaimer">Scout Program Builder is an independent planning tool and is not affiliated with, endorsed by, or associated with Scouts Australia or any official Scouts organisation. All Scouts Australia program framework references (OAS, milestones, challenge areas) are used for informational purposes only.</p>
         <div className="hero-btns">
           <Link href="/setup" className="btn-pri">Set up your group →</Link>
           <a href="#how" className="btn-sec">See how it works ↓</a>
