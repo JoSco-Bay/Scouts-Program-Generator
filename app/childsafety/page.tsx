@@ -39,7 +39,7 @@ export default function ChildSafetyPage() {
       <h2>Reporting a concern or requesting data deletion</h2>
       <p>
         To report a child safety concern or to request deletion of a child&apos;s data, contact
-        us at <a href="mailto:[INSERT CONTACT EMAIL]">[INSERT CONTACT EMAIL]</a>.
+        us at <a href="mailto:youthpathapp@gmail.com">youthpathapp@gmail.com</a>.
       </p>
     </LegalPage>
   );

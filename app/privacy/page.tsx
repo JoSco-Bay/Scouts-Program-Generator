@@ -37,7 +37,7 @@ export default function PrivacyPage() {
       <h2>Contact</h2>
       <p>
         For privacy questions or to request data deletion, contact us at{" "}
-        <a href="mailto:[INSERT CONTACT EMAIL]">[INSERT CONTACT EMAIL]</a>.
+        <a href="mailto:youthpathapp@gmail.com">youthpathapp@gmail.com</a>.
       </p>
     </LegalPage>
   );

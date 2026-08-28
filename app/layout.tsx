@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Scout Program Builder",
-  description: "Plan Scout terms, generate run sheets, and track member progress",
+  title: "YouthPath",
+  description: "Plan terms, generate AI run sheets, and track youth group member progress",
 };
 
 export default function RootLayout({

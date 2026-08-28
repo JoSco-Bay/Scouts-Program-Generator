@@ -48,6 +48,12 @@ export default function TermsPage() {
         We may update these terms from time to time. Continued use of the app after changes are
         posted constitutes acceptance of the updated terms.
       </p>
+
+      <h2>Contact</h2>
+      <p>
+        For questions about these terms, contact us at{" "}
+        <a href="mailto:youthpathapp@gmail.com">youthpathapp@gmail.com</a>.
+      </p>
     </LegalPage>
   );
 }

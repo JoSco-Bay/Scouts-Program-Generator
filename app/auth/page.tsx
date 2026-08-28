@@ -9,7 +9,11 @@ const acc = SECTION_COLOURS.Joeys.accent;
 export default function AuthPage() {
   const router = useRouter();
   const { user, loading, signIn, signUp, sendMagicLink } = useAuth();
-  const [mode, setMode]           = useState<'login' | 'signup' | 'magic'>('login');
+  const [mode, setMode]           = useState<'login' | 'signup' | 'magic'>(() =>
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'signup'
+      ? 'signup'
+      : 'login'
+  );
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [error, setError]         = useState('');

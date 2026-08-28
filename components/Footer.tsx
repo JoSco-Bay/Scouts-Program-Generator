@@ -21,7 +21,7 @@ export default function Footer() {
         }}
       >
         <p style={{ margin: "0 0 6px" }}>
-          Scout Program Builder is an independent planning tool and is not affiliated with,
+          YouthPath is an independent planning tool and is not affiliated with,
           endorsed by, or associated with Scouts Australia or any official Scouts organisation.
           All Scouts Australia program framework references (OAS, milestones, challenge areas)
           are used for informational purposes only.
