@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig, TermRow, Member, SIAEntry, MilestoneActivity } from "@/lib/types";
@@ -89,6 +89,8 @@ export default function MembersPage() {
   const [selectedId, setSelectedId]   = useState<string|null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
+  const [editingMemberId, setEditingMemberId] = useState<string|null>(null);
+  const [editMemberDraft, setEditMemberDraft] = useState({firstName:'',lastName:'',age:'',yearJoined:''});
   const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
   const [editSIAIdx, setEditSIAIdx] = useState<number | null>(null);
@@ -139,6 +141,27 @@ export default function MembersPage() {
     saveMembers([...members, newM]);
     setAddDraft({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
     setShowAddForm(false);
+  };
+
+  const startEditMember = (m: Member) => {
+    setEditMemberDraft({
+      firstName: m.firstName,
+      lastName: m.lastName,
+      age: m.age ? String(m.age) : '',
+      yearJoined: m.yearJoined ? String(m.yearJoined) : '',
+    });
+    setEditingMemberId(m.id);
+  };
+
+  const saveEditMember = (memberId: string) => {
+    saveMembers(members.map(m => m.id !== memberId ? m : {
+      ...m,
+      firstName: editMemberDraft.firstName.trim(),
+      lastName: editMemberDraft.lastName.trim(),
+      age: parseInt(editMemberDraft.age) || 0,
+      yearJoined: parseInt(editMemberDraft.yearJoined) || new Date().getFullYear(),
+    }));
+    setEditingMemberId(null);
   };
 
   const deleteMember = async (id: string) => {
@@ -281,10 +304,10 @@ export default function MembersPage() {
         .btn-sm:hover{border-color:${acc};color:${acc};}
         .btn-danger{font-size:11px;padding:3px 7px;border-radius:4px;border:1px solid #fca5a5;background:#fff;color:#ef4444;cursor:pointer;font-family:inherit;}
         .btn-danger:hover{background:#fef2f2;}
-        .member-row{display:grid;grid-template-columns:40px 1fr 80px 100px 140px 70px 32px;padding:10px 14px;gap:8px;align-items:center;border-bottom:1px solid #f3f4f6;}
+        .member-row{display:grid;grid-template-columns:40px 1fr 80px 100px 140px 70px 46px 32px;padding:10px 14px;gap:8px;align-items:center;border-bottom:1px solid #f3f4f6;}
         .member-row:last-child{border-bottom:none;}
         .member-row:hover{background:#fafaf8;}
-        .member-header{display:grid;grid-template-columns:40px 1fr 80px 100px 140px 70px 32px;padding:6px 14px;gap:8px;background:#f9fafb;border-bottom:1px solid #f3f4f6;}
+        .member-header{display:grid;grid-template-columns:40px 1fr 80px 100px 140px 70px 46px 32px;padding:6px 14px;gap:8px;background:#f9fafb;border-bottom:1px solid #f3f4f6;}
         .col-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;}
         .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0;}
         .m-name{font-size:13px;font-weight:500;color:#111827;}
@@ -471,7 +494,7 @@ export default function MembersPage() {
                 <div className="member-header">
                   <div/><div className="col-label">Name</div><div className="col-label">Attendance</div>
                   <div className="col-label">Milestones</div><div className="col-label">OAS / SIA</div>
-                  <div className="col-label">Profile</div><div/>
+                  <div className="col-label">Profile</div><div/><div/>
                 </div>
                 {members.map((m,idx)=>{
                   const pct = calcAttendancePct(m, rows);
@@ -479,7 +502,8 @@ export default function MembersPage() {
                   const oasEarned = Object.values(m.oas).filter(v=>v>0).length;
                   const siaComplete = m.sia.filter(s=>s.status==='complete').length;
                   return (
-                    <div key={m.id} className="member-row">
+                    <Fragment key={m.id}>
+                    <div className="member-row">
                       <div className="avatar" style={{background:avatarColour(idx,acc)}}>{initials(m)}</div>
                       <div>
                         <div className="m-name">{m.firstName} {m.lastName}</div>
@@ -504,8 +528,24 @@ export default function MembersPage() {
                         <div className="sia-count">{oasEarned} OAS · {siaComplete} SIA</div>
                       </div>
                       <button className="view-btn" onClick={()=>{setSelectedId(m.id);setView('profile');}}>View →</button>
+                      <button className="btn-sm" onClick={()=>editingMemberId===m.id?setEditingMemberId(null):startEditMember(m)}>✏ Edit</button>
                       <button className="btn-danger" onClick={()=>deleteMember(m.id)}>🗑</button>
                     </div>
+                    {editingMemberId===m.id && (
+                      <div className="add-form">
+                        <div className="add-grid">
+                          <div><div className="af-label">First name</div><input className="af-input" value={editMemberDraft.firstName} onChange={e=>setEditMemberDraft(d=>({...d,firstName:e.target.value}))}/></div>
+                          <div><div className="af-label">Last name</div><input className="af-input" value={editMemberDraft.lastName} onChange={e=>setEditMemberDraft(d=>({...d,lastName:e.target.value}))}/></div>
+                          <div><div className="af-label">Age</div><input className="af-input" type="number" min="4" max="18" value={editMemberDraft.age} onChange={e=>setEditMemberDraft(d=>({...d,age:e.target.value}))}/></div>
+                          <div><div className="af-label">Year joined</div><input className="af-input" type="number" min="2000" max="2035" value={editMemberDraft.yearJoined} onChange={e=>setEditMemberDraft(d=>({...d,yearJoined:e.target.value}))}/></div>
+                        </div>
+                        <div className="af-actions">
+                          <button className="btn-pri" onClick={()=>saveEditMember(m.id)}>Save</button>
+                          <button className="btn-sec" onClick={()=>setEditingMemberId(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    </Fragment>
                   );
                 })}
               </>
