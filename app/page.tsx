@@ -6,6 +6,13 @@ import UserMenu from "@/components/UserMenu";
 
 const SECTIONS = Object.entries(SECTION_COLOURS).map(([id, v]) => ({ id, ...v }));
 
+const WHO_COLOURS: Record<string, { bg: string; text: string }> = {
+  Joeys: { bg: '#FEF3DC', text: '#C17F24' },
+  Cubs: { bg: '#FFFACC', text: '#E8B800' },
+  Scouts: { bg: '#E8F5E4', text: '#6BBF5A' },
+  Venturers: { bg: '#FAE8ED', text: '#AA2A33' },
+};
+
 const FEATURES = [
   {
     key: 'term',
@@ -245,8 +252,8 @@ export default function HomePage() {
         .step-desc{font-size:13px;color:#6b7280;line-height:1.65;}
 
         .who-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;}
-        .who-card{border-radius:12px;padding:24px;text-align:center;}
-        .who-label{font-size:17px;font-weight:700;margin-bottom:4px;}
+        .who-card{border-radius:12px;padding:24px;text-align:center;border:2px solid;}
+        .who-label{font-size:22px;font-weight:800;letter-spacing:-0.01em;margin-bottom:4px;}
         .who-age{font-size:13px;opacity:0.85;}
         .who-note{text-align:center;font-size:13px;color:#9ca3af;margin-top:28px;}
 
@@ -334,12 +341,15 @@ export default function HomePage() {
           <h2 className="section-title">Built for every section</h2>
         </div>
         <div className="who-grid">
-          {SECTIONS.map(s => (
-            <div key={s.id} className="who-card" style={{ background: s.pale }}>
-              <div className="who-label" style={{ color: s.accent }}>{s.label}</div>
-              <div className="who-age" style={{ color: s.accent }}>{s.age}</div>
-            </div>
-          ))}
+          {SECTIONS.map(s => {
+            const c = WHO_COLOURS[s.id];
+            return (
+              <div key={s.id} className="who-card" style={{ background: c.bg, borderColor: c.text }}>
+                <div className="who-label" style={{ color: c.text }}>{s.label}</div>
+                <div className="who-age" style={{ color: c.text }}>{s.age}</div>
+              </div>
+            );
+          })}
         </div>
         <p className="who-note">More youth organisations coming soon.</p>
       </div>

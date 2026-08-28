@@ -8,11 +8,12 @@ export async function POST(req: Request) {
     }
     const openai = new OpenAI({ apiKey });
 
-    const { row, config, multiDayInfo } = await req.json();
+    const { row, config, multiDayInfo, instructions } = await req.json();
     if (!row || !config) {
       return Response.json({ error: "Missing session or group info" }, { status: 400 });
     }
     const sessionNotes = row.sessionNotes ? '\nLeader notes: ' + row.sessionNotes : '';
+    const regenInstructions = instructions ? `\n\nIMPORTANT — the leader has requested these specific changes, incorporate them into the plan: ${instructions}` : '';
 
     const isMultiDay = !!multiDayInfo;
     const dayNumber = multiDayInfo?.dayNumber;
@@ -124,7 +125,7 @@ Return ONLY this JSON structure:
 
 ${isMultiDay ? multiDayGuidelines : standardGuidelines}
 
-Write in the same plain, practical, slightly informal tone real Scout leaders use — short sentences, equipment lists, step-by-step instructions a parent helper could follow without prior knowledge.`,
+Write in the same plain, practical, slightly informal tone real Scout leaders use — short sentences, equipment lists, step-by-step instructions a parent helper could follow without prior knowledge.${regenInstructions}`,
         },
       ],
     });

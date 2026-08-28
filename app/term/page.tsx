@@ -2,16 +2,18 @@
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
-import type { GroupConfig, TermRow, Member, EventData } from "@/lib/types";
+import type { GroupConfig, TermRow, Member, EventData, SavedRunSheet } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import UserMenu from "@/components/UserMenu";
 import {
   loadGroupRecord, saveGroupConfig,
   loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
   loadMembers, replaceMembers,
+  getCachedRunSheetByRowId, loadRunSheetByTermRowId, saveRunSheet,
 } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
 import { loadEvent, saveEvent, deleteEvent } from "@/lib/events";
+import { generateRunSheet } from "@/lib/runsheetGen";
 
 const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
 
@@ -108,6 +110,8 @@ export default function TermPage() {
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
   const [aiError, setAiError] = useState('');
+  const [creatingRowId, setCreatingRowId] = useState<string|null>(null);
+  const [createErrors, setCreateErrors] = useState<Record<string,string>>({});
   const [exportingWord, setExportingWord] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -521,9 +525,32 @@ export default function TermPage() {
     }
   };
 
-  const openRunSheet = (row: TermRow) => {
-    localStorage.setItem('runSheetSource', JSON.stringify({row, config, isTermRow: true}));
+  const goToRunSheet = (row: TermRow, runSheetDbId?: string) => {
+    localStorage.setItem('runSheetSource', JSON.stringify({ row, config, isTermRow: true, runSheetDbId }));
     router.push('/runsheet');
+  };
+
+  const createRunSheet = async (row: TermRow) => {
+    setCreateErrors(e => { const n = {...e}; delete n[row.id]; return n; });
+
+    const cached = getCachedRunSheetByRowId(row.id);
+    if (cached) { goToRunSheet(row, cached.dbId); return; }
+
+    const existing = await loadRunSheetByTermRowId('', row.id);
+    if (existing) { goToRunSheet(row, existing.dbId); return; }
+
+    if (!config) return;
+    setCreatingRowId(row.id);
+    try {
+      const genData = await generateRunSheet(row, config);
+      const sheet: SavedRunSheet = { data: genData, row, config };
+      const dbId = await saveRunSheet('', groupId || '', row.id, sheet);
+      goToRunSheet(row, dbId);
+    } catch (err: unknown) {
+      setCreateErrors(e => ({ ...e, [row.id]: (err as Error).message || 'Failed to generate run sheet' }));
+    } finally {
+      setCreatingRowId(null);
+    }
   };
 
   const openEventPlanner = (row: TermRow) => {
@@ -919,7 +946,12 @@ export default function TermPage() {
                             {row.rowType==='multiday' ? (
                               <button className="create-btn" onClick={()=>openEventPlanner(row)}>📅 Plan event</button>
                             ) : (
-                              <button className="create-btn" onClick={()=>openRunSheet(row)}>Create</button>
+                              <>
+                                <button className="create-btn" disabled={creatingRowId===row.id} onClick={()=>createRunSheet(row)}>
+                                  {creatingRowId===row.id ? '⏳ Generating…' : 'Create'}
+                                </button>
+                                {createErrors[row.id] && <div style={{fontSize:'9px',color:'#dc2626',marginTop:'2px',lineHeight:'1.3'}}>{createErrors[row.id]}</div>}
+                              </>
                             )}
                             <button className="del-btn" onClick={()=>deleteRow(row.id)}>🗑 delete</button>
                           </div>

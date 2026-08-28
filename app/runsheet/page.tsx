@@ -9,17 +9,11 @@ import {
 } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import UserMenu from "@/components/UserMenu";
+import { generateRunSheet, type MultiDayInfo } from "@/lib/runsheetGen";
 
 const CHALLENGE_ICONS: Record<string,string> = {
   Community: '🤝', Outdoor: '🌿', Creative: '🎨', Personal: '⭐',
 };
-
-interface MultiDayInfo {
-  eventName: string;
-  dayNumber: number;
-  totalDays: number;
-  location: string;
-}
 
 interface RunSheetSource {
   row: TermRow;
@@ -65,12 +59,8 @@ export default function RunSheetPage() {
   const [genError, setGenError]       = useState('');
   const [editingId, setEditingId]     = useState<string|null>(null);
   const [editDraft, setEditDraft]     = useState<Partial<ActivityRow>>({});
-
-  const [quickTopic, setQuickTopic]       = useState('');
-  const [quickDate, setQuickDate]         = useState('');
-  const [quickTime, setQuickTime]         = useState('6:00pm');
-  const [quickLocation, setQuickLocation] = useState('Hall');
-  const [quickOas, setQuickOas]           = useState('');
+  const [showRegenPanel, setShowRegenPanel] = useState(false);
+  const [regenInstructions, setRegenInstructions] = useState('');
 
   const saveScheduled = useRef<NodeJS.Timeout | null>(null);
 
@@ -140,38 +130,20 @@ export default function RunSheetPage() {
   const sc  = config ? SECTION_COLOURS[config.section]||SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
   const acc = sc.accent;
 
-  const generate = async (rowOverride?: TermRow) => {
-    const activeRow    = rowOverride || source?.row;
+  const regenerate = async (instructions?: string) => {
+    const activeRow    = source?.row;
     const activeConfig = source?.config || config;
     if (!activeRow || !activeConfig) return;
     setGenerating(true); setGenError('');
     try {
-      const res = await fetch('/api/generate-runsheet',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ row: activeRow, config: activeConfig, multiDayInfo: source?.multiDayInfo }),
-      });
-      if (!res.ok){ const text=await res.text(); throw new Error(`API error ${res.status}: ${text.slice(0,200)}`); }
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      if (!json.activities || !Array.isArray(json.activities)) throw new Error('No activities returned from AI');
-      const updatedSource: RunSheetSource = { row: activeRow, config: activeConfig, isTermRow: source?.isTermRow, multiDayInfo: source?.multiDayInfo };
-      setSource(updatedSource);
+      const json = await generateRunSheet(activeRow, activeConfig, source?.multiDayInfo, instructions);
       setData(json);
       setGenerated(true);
+      setShowRegenPanel(false);
+      setRegenInstructions('');
     } catch(err: unknown){
       setGenError((err as Error).message || 'Something went wrong generating the run sheet. Please try again.');
     } finally { setGenerating(false); }
-  };
-
-  const generateQuick = () => {
-    if (!config) return;
-    const quickRow: TermRow = {
-      id: genId(), date: quickDate || new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}),
-      time: quickTime, topic: quickTopic||'Scout meeting', location: quickLocation,
-      oasFocus: quickOas, sessionNotes: '', bring:'', leader: config.leaders[0]||'', assistantPatrol:'',
-      consentRequired:false, rowType:'session',
-    };
-    generate(quickRow);
   };
 
   const startEdit = (a: ActivityRow) => { setEditingId(a.id); setEditDraft({...a}); };
@@ -298,11 +270,8 @@ export default function RunSheetPage() {
         .gen-error{background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-size:12px;padding:8px 12px;border-radius:6px;margin-top:14px;text-align:left;}
         .spinning{display:inline-block;animation:spin 1s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg);}}
-        .qf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;text-align:left;}
-        .qf-field{display:flex;flex-direction:column;gap:4px;}
-        .qf-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;}
-        .qf-field input{border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;font-size:13px;color:#111;font-family:inherit;outline:none;}
-        .qf-field input:focus{border-color:var(--acc);}
+        .regen-input{width:100%;min-height:80px;border:1px solid #d1d5db;border-radius:6px;padding:9px 11px;font-size:13px;color:#111;font-family:inherit;outline:none;resize:vertical;line-height:1.6;text-align:left;}
+        .regen-input:focus{border-color:var(--acc);}
         .sheet-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;}
         .sheet-head{background:${NAVY};padding:16px 18px;}
         .sheet-title{color:#fff;font-size:19px;font-weight:700;letter-spacing:-0.01em;margin-bottom:3px;}
@@ -379,7 +348,6 @@ export default function RunSheetPage() {
           .pal-col{border-right:none;border-bottom:1px solid #f3f4f6;}
           .pal-col:last-child{border-bottom:none;}
           .items-grid{grid-template-columns:1fr;}
-          .qf-grid{grid-template-columns:1fr;}
         }
         @media print {
           .nav,.ph,.gen-card,.add-row,.av-actions,.edit-btn,.del-btn,.act-edit,.list-del,.list-add{display:none!important;}
@@ -405,7 +373,7 @@ export default function RunSheetPage() {
           <button className="nav-btn" onClick={()=>window.print()}>🖨 Print</button>
           <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
           {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}
-          {generated && source?.row && <button className="nav-btn" onClick={()=>generate()}>↺ Regenerate</button>}
+          {generated && source?.row && <button className="nav-btn" onClick={()=>setShowRegenPanel(v=>!v)}>↺ Regenerate</button>}
           <UserMenu />
         </div>
       </nav>
@@ -418,34 +386,13 @@ export default function RunSheetPage() {
 
       <div className="body">
 
-        {!row && !generating && !generated && (
+        {!generated && !generating && (
           <div className="gen-card">
-            <div className="gen-title">Create a run sheet</div>
-            <div className="gen-desc" style={{marginBottom:'16px'}}>
-              No session selected from a term plan — fill in the details below and AI will generate a complete session plan.
-            </div>
-            <div className="qf-grid">
-              <div className="qf-field"><div className="qf-label">Topic / theme</div><input value={quickTopic} onChange={e=>setQuickTopic(e.target.value)} placeholder="e.g. Camp cooking"/></div>
-              <div className="qf-field"><div className="qf-label">OAS focus (optional)</div><input value={quickOas} onChange={e=>setQuickOas(e.target.value)} placeholder="e.g. Camping S1"/></div>
-              <div className="qf-field"><div className="qf-label">Date</div><input type="date" value={quickDate} onChange={e=>setQuickDate(e.target.value)}/></div>
-              <div className="qf-field"><div className="qf-label">Time</div><input value={quickTime} onChange={e=>setQuickTime(e.target.value)} placeholder="e.g. 6:00pm"/></div>
-              <div className="qf-field" style={{gridColumn:'span 2'}}><div className="qf-label">Location</div><input value={quickLocation} onChange={e=>setQuickLocation(e.target.value)} placeholder="e.g. Hall"/></div>
-            </div>
-            <button className="gen-btn" onClick={generateQuick} disabled={!quickTopic}>Generate run sheet →</button>
-            {genError && <div className="gen-error">⚠ {genError}</div>}
-          </div>
-        )}
-
-        {!generated && !generating && row && (
-          <div className="gen-card">
-            <div className="gen-title">Generate run sheet</div>
-            <div className="gen-topic">{row.topic}</div>
+            <div className="gen-title">No run sheet found</div>
             <div className="gen-desc">
-              AI will generate a complete PLAN/DO/REVIEW session plan with challenge areas, timed activities, safety notes, equipment lists, and participate/assist/lead suggestions.
-              {row.oasFocus && ` OAS focus: ${row.oasFocus}.`}
+              This session doesn&apos;t have a run sheet yet. Go back to the term plan and click Create on a session to generate one.
             </div>
-            <button className="gen-btn" onClick={()=>generate()}>Generate run sheet →</button>
-            {genError && <div className="gen-error">⚠ {genError}</div>}
+            <button className="gen-btn" onClick={()=>router.push('/term')}>← Back to term plan</button>
           </div>
         )}
 
@@ -454,6 +401,26 @@ export default function RunSheetPage() {
             <div style={{fontSize:'32px',marginBottom:'12px'}} className="spinning">⏳</div>
             <div className="gen-title">Building your run sheet…</div>
             <div className="gen-desc">Generating activities, safety notes, and equipment lists</div>
+          </div>
+        )}
+
+        {showRegenPanel && generated && !generating && (
+          <div className="gen-card">
+            <div className="gen-title">Regenerate run sheet</div>
+            <div className="gen-desc" style={{marginBottom:'10px'}}>
+              Optionally tell the AI what to change — leave blank to regenerate from scratch.
+            </div>
+            <textarea
+              className="regen-input"
+              value={regenInstructions}
+              onChange={e=>setRegenInstructions(e.target.value)}
+              placeholder="e.g. Make it more water-based, add a teamwork game, shorten to 45 minutes"
+            />
+            <div style={{display:'flex',gap:'8px',justifyContent:'center',marginTop:'12px'}}>
+              <button className="gen-btn" onClick={()=>regenerate(regenInstructions.trim()||undefined)}>Regenerate →</button>
+              <button className="cancel-btn" onClick={()=>{setShowRegenPanel(false);setRegenInstructions('');}}>Cancel</button>
+            </div>
+            {genError && <div className="gen-error">⚠ {genError}</div>}
           </div>
         )}
 
