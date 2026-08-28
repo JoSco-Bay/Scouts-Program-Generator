@@ -8,19 +8,33 @@ const acc = SECTION_COLOURS.Joeys.accent;
 
 export default function AuthPage() {
   const router = useRouter();
-  const { user, loading, signIn, signUp } = useAuth();
-  const [mode, setMode]           = useState<'login' | 'signup'>('login');
+  const { user, loading, signIn, signUp, sendMagicLink } = useAuth();
+  const [mode, setMode]           = useState<'login' | 'signup' | 'magic'>('login');
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [error, setError]         = useState('');
   const [working, setWorking]     = useState(false);
   const [signupDone, setSignupDone] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
   useEffect(() => {
     if (!loading && user) router.push('/term');
   }, [user, loading, router]);
 
+  const switchMode = (m: 'login' | 'signup' | 'magic') => {
+    setMode(m); setError(''); setSignupDone(false); setMagicSent(false);
+  };
+
   const submit = async () => {
+    if (mode === 'magic') {
+      if (!email) { setError('Enter your email.'); return; }
+      setWorking(true); setError('');
+      const { error } = await sendMagicLink(email);
+      if (error) { setError(error); setWorking(false); return; }
+      setMagicSent(true);
+      setWorking(false);
+      return;
+    }
     if (!email || !password) { setError('Enter your email and password.'); return; }
     setWorking(true); setError('');
     if (mode === 'login') {
@@ -78,13 +92,23 @@ export default function AuthPage() {
               We sent a confirmation link to <strong>{email}</strong>.<br/>
               Click it to activate your account, then sign in here.
             </div>
+          ) : magicSent ? (
+            <div className="success">
+              <strong>Check your email!</strong><br/>
+              We sent a sign-in link to <strong>{email}</strong>.<br/>
+              Click it to sign in — no password needed.
+            </div>
           ) : (
             <>
-              <div className="title">{mode === 'login' ? 'Sign in' : 'Create account'}</div>
+              <div className="title">
+                {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Email me a link'}
+              </div>
               <div className="sub">
                 {mode === 'login'
                   ? 'Sign in to your Scout Program Builder account'
-                  : 'Create your Scout Program Builder account to get started'}
+                  : mode === 'signup'
+                  ? 'Create your Scout Program Builder account to get started'
+                  : 'We’ll email you a link that signs you in instantly — no password needed'}
               </div>
               <div className="field">
                 <div className="lbl">Email</div>
@@ -96,27 +120,37 @@ export default function AuthPage() {
                   onKeyDown={e => e.key === 'Enter' && submit()}
                 />
               </div>
-              <div className="field">
-                <div className="lbl">Password</div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  onKeyDown={e => e.key === 'Enter' && submit()}
-                />
-              </div>
+              {mode !== 'magic' && (
+                <div className="field">
+                  <div className="lbl">Password</div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                    onKeyDown={e => e.key === 'Enter' && submit()}
+                  />
+                </div>
+              )}
               <button className="btn" onClick={submit} disabled={working}>
-                {working ? 'Please wait…' : mode === 'login' ? 'Sign in →' : 'Create account →'}
+                {working
+                  ? 'Please wait…'
+                  : mode === 'login' ? 'Sign in →'
+                  : mode === 'signup' ? 'Create account →'
+                  : 'Send magic link →'}
               </button>
               {error && <div className="err">⚠ {error}</div>}
               <hr className="divider"/>
               <div className="toggle">
-                {mode === 'login'
-                  ? <>Don&apos;t have an account? <span onClick={() => { setMode('signup'); setError(''); }}>Sign up</span></>
-                  : <>Already have an account? <span onClick={() => { setMode('login'); setError(''); }}>Sign in</span></>
-                }
+                {mode === 'login' && <>Don&apos;t have an account? <span onClick={() => switchMode('signup')}>Sign up</span></>}
+                {mode === 'signup' && <>Already have an account? <span onClick={() => switchMode('login')}>Sign in</span></>}
+                {mode === 'magic' && <>Prefer a password? <span onClick={() => switchMode('login')}>Sign in</span></>}
               </div>
+              {mode !== 'magic' && (
+                <div className="toggle" style={{marginTop:'8px'}}>
+                  <span onClick={() => switchMode('magic')}>Email me a magic link instead</span>
+                </div>
+              )}
               {mode === 'signup' && (
                 <div className="hint">
                   Tip: disable email confirmation in Supabase → Authentication → Settings if you want to skip the verify step.

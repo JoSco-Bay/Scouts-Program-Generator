@@ -7,6 +7,8 @@ import {
   loadGroupRecord, loadRunSheetById, loadRunSheetByTermRowId, saveRunSheet,
   getCachedRunSheetByRowId,
 } from "@/lib/db";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 const CHALLENGE_ICONS: Record<string,string> = {
   Community: '🤝', Outdoor: '🌿', Creative: '🎨', Personal: '⭐',
@@ -51,6 +53,7 @@ function formatMinutesToTime(mins: number): string {
 
 export default function RunSheetPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [groupId, setGroupId]         = useState<string | null>(null);
   const [dbLoading, setDbLoading]     = useState(true);
   const [runSheetDbId, setRunSheetDbId] = useState<string | null>(null);
@@ -72,6 +75,8 @@ export default function RunSheetPage() {
   const saveScheduled = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(()=>{
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       // Load group config from Supabase (keyed by groupId in localStorage)
       const grp = await loadGroupRecord('');
@@ -114,7 +119,7 @@ export default function RunSheetPage() {
       setDbLoading(false);
     }
     load();
-  },[]);
+  },[user, authLoading, router]);
 
   // Debounced auto-save whenever data changes (covers generate and user edits).
   // saveRunSheet always writes to localStorage even if the Supabase save fails,
@@ -264,7 +269,7 @@ export default function RunSheetPage() {
     });
   };
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   return (
     <>
@@ -401,6 +406,7 @@ export default function RunSheetPage() {
           <button className="nav-btn" style={{background:acc,borderColor:acc,color:'#fff'}} onClick={()=>window.print()}>⬇ PDF</button>
           {generated && <button className="nav-btn" onClick={downloadRunSheet}>💾 Save</button>}
           {generated && source?.row && <button className="nav-btn" onClick={()=>generate()}>↺ Regenerate</button>}
+          <UserMenu />
         </div>
       </nav>
 

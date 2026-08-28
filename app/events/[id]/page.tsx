@@ -5,6 +5,8 @@ import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig, EventData, EventDayDetails, TermRow } from "@/lib/types";
 import { loadGroupRecord } from "@/lib/db";
 import { loadEvent, saveEvent } from "@/lib/events";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 function formatDayLabel(d: Date): string {
   return d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long'});
@@ -48,6 +50,7 @@ export default function EventPlannerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id as string;
+  const { user, loading: authLoading } = useAuth();
 
   const [config, setConfig]   = useState<GroupConfig|null>(null);
   const [event, setEvent]     = useState<EventData|null>(null);
@@ -55,6 +58,8 @@ export default function EventPlannerPage() {
   const [activeDay, setActiveDay] = useState(0);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       const grp = await loadGroupRecord('');
       if (grp) {
@@ -67,7 +72,7 @@ export default function EventPlannerPage() {
       setDbLoading(false);
     }
     load();
-  }, [id]);
+  }, [id, user, authLoading, router]);
 
   const sc  = config ? SECTION_COLOURS[config.section] || SECTION_COLOURS.Joeys : SECTION_COLOURS.Joeys;
   const acc = sc.accent;
@@ -120,7 +125,7 @@ export default function EventPlannerPage() {
     router.push('/runsheet');
   };
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   if (!event) {
     return (
@@ -186,7 +191,10 @@ export default function EventPlannerPage() {
           <div className="nav-dot">⚜</div>
           <span className="nav-title">Scout Program Builder</span>
         </div>
-        <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+          <UserMenu />
+        </div>
       </nav>
 
       <div className="ph">

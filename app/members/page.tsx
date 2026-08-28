@@ -8,6 +8,8 @@ import {
   loadGroupRecord, loadTermRows, loadMembers,
   upsertMembers, deleteMemberById,
 } from "@/lib/db";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 const PEAK_AWARDS: Record<string,string> = {
   Joeys:     'Joey Scout Challenge',
@@ -77,6 +79,7 @@ function avatarColour(idx: number, acc: string): string {
 export default function MembersPage() {
   const router = useRouter();
 
+  const { user, loading: authLoading } = useAuth();
   const [groupId, setGroupId]     = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(true);
   const [config, setConfig]       = useState<GroupConfig|null>(null);
@@ -94,6 +97,8 @@ export default function MembersPage() {
   const [showMilForm, setShowMilForm] = useState(false);
 
   useEffect(()=>{
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       const [grp, termRows, memberData] = await Promise.all([
         loadGroupRecord(""),
@@ -106,7 +111,7 @@ export default function MembersPage() {
       setDbLoading(false);
     }
     load();
-  },[]);
+  },[user, authLoading, router]);
 
   const acc     = config ? SECTION_COLOURS[config.section]?.accent||'#C17F24' : '#C17F24';
   const pale    = config ? SECTION_COLOURS[config.section]?.pale||'rgba(193,127,36,0.07)' : 'rgba(193,127,36,0.07)';
@@ -235,7 +240,7 @@ export default function MembersPage() {
   const totalOAS = members.reduce((s,m)=>s+Object.values(m.oas).filter(v=>v>0).length,0);
   const totalSIA = members.reduce((s,m)=>s+m.sia.filter(x=>x.status==='complete').length,0);
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   return (
     <>
@@ -396,8 +401,11 @@ export default function MembersPage() {
           {config && <span className="nav-tag">{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
-        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
-        <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
+          <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
+          <UserMenu />
+        </div>
       </nav>
 
       <div className="ph">

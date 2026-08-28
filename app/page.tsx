@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import UserMenu from "@/components/UserMenu";
 
 export default function HomePage() {
   return (
@@ -50,6 +51,7 @@ export default function HomePage() {
         <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
           <Link href="/help" className="nav-cta">? Help</Link>
           <Link href="/setup" className="nav-cta">Get started →</Link>
+          <UserMenu />
         </div>
       </nav>
 

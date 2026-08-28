@@ -5,14 +5,19 @@ import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig } from "@/lib/types";
 import { loadGroupRecord, loadRunSheets, deleteRunSheet } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 export default function RunSheetsPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [config, setConfig] = useState<GroupConfig|null>(null);
   const [sheets, setSheets] = useState<RunSheetEntry[]>([]);
   const [dbLoading, setDbLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       let grp = null;
       let sheetData: RunSheetEntry[] = [];
@@ -45,7 +50,7 @@ export default function RunSheetsPage() {
       setDbLoading(false);
     }
     load();
-  }, []);
+  }, [user, authLoading, router]);
 
   const acc  = config ? SECTION_COLOURS[config.section]?.accent||'#C17F24' : '#C17F24';
   const pale = config ? SECTION_COLOURS[config.section]?.pale||'rgba(193,127,36,0.07)' : 'rgba(193,127,36,0.07)';
@@ -66,7 +71,7 @@ export default function RunSheetsPage() {
     setSheets(prev => prev.filter(s => s.dbId !== sheet.dbId));
   };
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   return (
     <>
@@ -116,8 +121,11 @@ export default function RunSheetsPage() {
           {config && <span className="nav-tag">{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
-        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
-        <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
+          <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+          <UserMenu />
+        </div>
       </nav>
 
       <div className="ph">

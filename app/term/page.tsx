@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig, TermRow, Member, EventData } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 import {
   loadGroupRecord, saveGroupConfig,
   loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
@@ -130,7 +131,8 @@ export default function TermPage() {
 
   // ── Load from Supabase (or localStorage fallback) ─────────────────────────
   useEffect(()=>{
-    // Phase 4: no auth required — load by groupId from localStorage
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       const [grp, termRows, members] = await Promise.all([
         loadGroupRecord(''),
@@ -154,8 +156,7 @@ export default function TermPage() {
       setDbLoading(false);
     }
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[user, authLoading, router]);
 
   // ── localStorage cache — keep in sync whenever rows/config change ──────────
   useEffect(() => {
@@ -533,7 +534,7 @@ export default function TermPage() {
   const activeCols   = COLUMN_DEFS.filter(c=>visibleCols[c.key]);
   const colSpanTotal = activeCols.length + 1;
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   return (
     <>
@@ -690,8 +691,11 @@ export default function TermPage() {
           {config && <span className="nav-tag" style={{background:acc}}>{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
-        <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
-        <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
+          <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
+          <UserMenu />
+        </div>
       </nav>
 
       <div className="ph">

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig, Member } from "@/lib/types";
 import { loadGroupRecord, saveGroupConfig, loadMembers, upsertMembers } from "@/lib/db";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 function genId() { return Math.random().toString(36).slice(2,9); }
 
@@ -26,6 +28,7 @@ function InfoBtn({ title, body, tip }: { title: string; body: string; tip?: stri
 
 export default function SetupPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [groupId, setGroupId]       = useState<string | null>(null);
   const [dbLoading, setDbLoading]   = useState(true);
   const [groupName, setGroupName]   = useState('');
@@ -56,6 +59,8 @@ export default function SetupPage() {
 
   // ── Load group from Supabase (by groupId in localStorage) ─────────────────
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     async function load() {
       const record = await loadGroupRecord('');
       if (record) {
@@ -85,7 +90,7 @@ export default function SetupPage() {
       setDbLoading(false);
     }
     load();
-  }, []);
+  }, [user, authLoading, router]);
 
   const acc     = SECTION_COLOURS[section]?.accent || '#C17F24';
   const accText = SECTION_COLOURS[section]?.text   || '#fff';
@@ -142,7 +147,7 @@ export default function SetupPage() {
     }
   };
 
-  if (dbLoading) return null;
+  if (authLoading || dbLoading) return null;
 
   return (
     <>
@@ -202,6 +207,7 @@ export default function SetupPage() {
           <a href="/help" className="nav-help">? Help</a>
           <div className="nav-dot" style={{background:acc}}>⚜</div>
           <span className="nav-label">Group setup</span>
+          <UserMenu />
         </div>
       </nav>
 

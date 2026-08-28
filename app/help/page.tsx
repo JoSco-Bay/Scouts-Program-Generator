@@ -3,18 +3,25 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig } from "@/lib/types";
+import { useAuth } from "@/lib/auth-context";
+import UserMenu from "@/components/UserMenu";
 
 export default function HelpPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [config, setConfig] = useState<GroupConfig|null>(null);
 
   useEffect(()=>{
+    if (authLoading) return;
+    if (!user) { router.push('/auth'); return; }
     const c = localStorage.getItem('groupConfig');
     if (c) setConfig(JSON.parse(c));
-  },[]);
+  },[user, authLoading, router]);
 
   const acc  = config ? SECTION_COLOURS[config.section]?.accent||'#C17F24' : '#C17F24';
   const pale = config ? SECTION_COLOURS[config.section]?.pale||'rgba(193,127,36,0.07)' : 'rgba(193,127,36,0.07)';
+
+  if (authLoading || !user) return null;
 
   return (
     <>
@@ -82,7 +89,10 @@ export default function HelpPage() {
           {config && <span className="nav-tag">{config.section}</span>}
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
-        <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={()=>router.push('/term')}>← Term plan</button>
+          <UserMenu />
+        </div>
       </nav>
 
       <div className="ph">
