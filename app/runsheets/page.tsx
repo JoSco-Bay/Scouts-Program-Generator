@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SECTION_COLOURS, NAVY } from "@/lib/colours";
 import type { GroupConfig } from "@/lib/types";
-import { loadGroupRecord, loadRunSheets, deleteRunSheet } from "@/lib/db";
+import { loadGroupRecord, loadRunSheets, deleteRunSheet, getActiveTerm, loadTermRows } from "@/lib/db";
 import type { RunSheetEntry } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import UserMenu from "@/components/UserMenu";
@@ -13,6 +13,7 @@ export default function RunSheetsPage() {
   const { user, loading: authLoading } = useAuth();
   const [config, setConfig] = useState<GroupConfig|null>(null);
   const [sheets, setSheets] = useState<RunSheetEntry[]>([]);
+  const [termName, setTermName] = useState('');
   const [dbLoading, setDbLoading] = useState(true);
 
   useEffect(() => {
@@ -39,9 +40,24 @@ export default function RunSheetsPage() {
         }
       }
       if (grp) setConfig(grp.config);
+
+      // Scope the list to the active term's sessions — a run sheet with no term_row_id
+      // (e.g. a quick-created one, not tied to any session) is excluded too — it never
+      // belonged to a specific term, but that's still not "this" term's content.
+      let activeRowIds: Set<string> | null = null;
+      if (grp) {
+        const activeTerm = await getActiveTerm(grp.id);
+        if (activeTerm) {
+          setTermName(activeTerm.termName);
+          const termRows = await loadTermRows('', activeTerm.id);
+          activeRowIds = new Set(termRows.map(r => r.id));
+        }
+      }
+
       setSheets(
         (sheetData || [])
           .filter((s) => s && s.entry && s.entry.row)
+          .filter((s) => !activeRowIds || (s.termRowId && activeRowIds.has(s.termRowId)))
           .sort((a, b) => {
             const parts = (d: string) => d.split(' ').slice(-2).join(' ') + ' 2026';
             return Date.parse(parts(a.entry?.row?.date || '')) - Date.parse(parts(b.entry?.row?.date || ''));
@@ -131,7 +147,7 @@ export default function RunSheetsPage() {
       <div className="ph">
         <div className="bc">Home › Term Plans › Run Sheets</div>
         <div className="ph-title">Run Sheets</div>
-        <div className="ph-sub">{config?.meetingDay}s · {config?.groupName}</div>
+        <div className="ph-sub">{config?.meetingDay}s · {config?.groupName}{termName ? ` · ${termName}` : ''}</div>
         <div className="tabs">
           <div className="tab" onClick={()=>router.push('/term')}>Term plan</div>
           <div className="tab on">Run sheets</div>

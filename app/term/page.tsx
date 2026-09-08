@@ -10,8 +10,9 @@ import {
   loadTermRows, upsertTermRows, replaceTermRows, deleteTermRow,
   loadMembers, replaceMembers,
   getCachedRunSheetByRowId, loadRunSheetByTermRowId, saveRunSheet,
+  getActiveTerm, loadTerms, createTerm, setActiveTerm, updateTermMeta,
 } from "@/lib/db";
-import type { RunSheetEntry } from "@/lib/db";
+import type { RunSheetEntry, TermEntry } from "@/lib/db";
 import { loadEvent, saveEvent, deleteEvent } from "@/lib/events";
 import { generateRunSheet } from "@/lib/runsheetGen";
 
@@ -87,6 +88,7 @@ export default function TermPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [groupId, setGroupId]     = useState<string | null>(null);
+  const [activeTermId, setActiveTermId] = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(true);
   const [config, setConfig]       = useState<GroupConfig|null>(null);
   const [startDate, setStartDate] = useState(() => (typeof window!=='undefined' ? (localStorage.getItem('termStartDate')||'') : ''));
@@ -112,6 +114,10 @@ export default function TermPage() {
   const [aiError, setAiError] = useState('');
   const [creatingRowId, setCreatingRowId] = useState<string|null>(null);
   const [createErrors, setCreateErrors] = useState<Record<string,string>>({});
+  const [savedPlans, setSavedPlans] = useState<TermEntry[]>([]);
+  const [showSavedPlans, setShowSavedPlans] = useState(false);
+  const [savedPlansLoading, setSavedPlansLoading] = useState(false);
+  const savedPlansRef = useRef<HTMLDivElement>(null);
   const [exportingWord, setExportingWord] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,17 +144,35 @@ export default function TermPage() {
     if (authLoading) return;
     if (!user) { router.push('/auth'); return; }
     async function load() {
-      const [grp, termRows, members] = await Promise.all([
+      const [grp, members] = await Promise.all([
         loadGroupRecord(''),
-        loadTermRows(''),
         loadMembers(''),
       ]);
+      let gid: string | null = null;
       if (grp) {
         setGroupId(grp.id);
         setConfig(grp.config);
+        gid = grp.id;
       } else {
         const cached = localStorage.getItem('groupConfig');
         if (cached) try { setConfig(JSON.parse(cached)); } catch {}
+      }
+      setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
+
+      let termRows: TermRow[] = [];
+      if (gid) {
+        let term = await getActiveTerm(gid);
+        if (!term) {
+          const newId = await createTerm(gid, termName, '', '');
+          term = newId ? { id: newId, termName, startDate: '', endDate: '', isActive: true, createdAt: '' } : null;
+        }
+        if (term) {
+          setActiveTermId(term.id);
+          if (term.termName) setTermName(term.termName);
+          if (term.startDate) setStartDate(term.startDate);
+          if (term.endDate) setEndDate(term.endDate);
+          termRows = await loadTermRows('', term.id);
+        }
       }
       if (termRows.length) {
         setRows(termRows); setDatesSet(true);
@@ -156,10 +180,12 @@ export default function TermPage() {
         const cached = localStorage.getItem('programRows');
         if (cached) try { const r = JSON.parse(cached); setRows(r); setDatesSet(r.length > 0); } catch {}
       }
-      setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
       setDbLoading(false);
     }
     load();
+  // termName is intentionally excluded — this must only run once per auth change,
+  // not re-fetch everything on every keystroke while editing the term name.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[user, authLoading, router]);
 
   // ── localStorage cache — keep in sync whenever rows/config change ──────────
@@ -190,13 +216,13 @@ export default function TermPage() {
   const saveRows = useCallback(async (r: TermRow[]) => {
     setRows(r);
     localStorage.setItem('programRows', JSON.stringify(r));
-    if (!groupId) return;
-    try { await upsertTermRows('', groupId, r); }
+    if (!groupId || !activeTermId) return;
+    try { await upsertTermRows('', groupId, activeTermId, r); }
     catch (e) { console.error('Term rows save failed:', e); }
-  }, [groupId]);
+  }, [groupId, activeTermId]);
 
   const buildDates = useCallback(async ()=>{
-    if (!startDate||!endDate||!config||!groupId) return;
+    if (!startDate||!endDate||!config||!groupId||!activeTermId) return;
     const dates = getMeetingDates(startDate, endDate, config.meetingDay);
     const newRows: TermRow[] = dates.map(d=>({
       id:genId(), date:d.date, time:fmt12(config.meetingTime),
@@ -206,9 +232,12 @@ export default function TermPage() {
     }));
     setRows(newRows); setDatesSet(true);
     localStorage.setItem('programRows', JSON.stringify(newRows));
-    try { await replaceTermRows('', groupId, newRows); }
+    try {
+      await replaceTermRows('', groupId, activeTermId, newRows);
+      await updateTermMeta(activeTermId, termName, startDate, endDate);
+    }
     catch (e) { console.error('Build dates save failed:', e); }
-  },[startDate,endDate,config,groupId]);
+  },[startDate,endDate,config,groupId,activeTermId,termName]);
 
   const sortByDate = useCallback((arr: TermRow[]) => {
     const yearMatch = termName.match(/(\d{4})/);
@@ -437,9 +466,20 @@ export default function TermPage() {
       if (data.rows) {
         setRows(data.rows); setDatesSet(true);
         localStorage.setItem('programRows', JSON.stringify(data.rows));
-        if (activeGroupId) {
-          await replaceTermRows('', activeGroupId, data.rows);
-          const verify = await loadTermRows('');
+        let activeTermIdForUpload = activeTermId;
+        if (activeGroupId && !activeTermIdForUpload) {
+          let term = await getActiveTerm(activeGroupId);
+          if (!term) {
+            const newId = await createTerm(activeGroupId, data.termName || termName, data.startDate || '', data.endDate || '');
+            term = newId ? { id: newId, termName: data.termName || termName, startDate: data.startDate || '', endDate: data.endDate || '', isActive: true, createdAt: '' } : null;
+          }
+          activeTermIdForUpload = term?.id ?? null;
+          if (activeTermIdForUpload) setActiveTermId(activeTermIdForUpload);
+        }
+        if (activeGroupId && activeTermIdForUpload) {
+          await replaceTermRows('', activeGroupId, activeTermIdForUpload, data.rows);
+          await updateTermMeta(activeTermIdForUpload, data.termName || termName, data.startDate || startDate, data.endDate || endDate);
+          const verify = await loadTermRows('', activeTermIdForUpload);
           if (verify.length !== data.rows.length) syncFailed = true;
         } else {
           syncFailed = true;
@@ -553,6 +593,56 @@ export default function TermPage() {
     }
   };
 
+  const startNewTerm = async () => {
+    if (!groupId) return;
+    const name = prompt(`Name for the new term? "${termName}" stays exactly as it is — you can switch back to it any time from My terms.`, 'Term ' + (new Date().getMonth() < 6 ? '1' : '3') + ', ' + new Date().getFullYear());
+    if (name === null) return;
+    const newId = await createTerm(groupId, name.trim() || 'New Term', '', '');
+    if (!newId) { alert('Could not create a new term — please try again.'); return; }
+    setActiveTermId(newId);
+    setRows([]);
+    setDatesSet(false);
+    setStartDate('');
+    setEndDate('');
+    setTermName(name.trim() || 'New Term');
+    localStorage.removeItem('programRows');
+    localStorage.removeItem('termStartDate');
+    localStorage.removeItem('termEndDate');
+  };
+
+  const openSavedPlans = async () => {
+    setShowSavedPlans(v => !v);
+    if (!showSavedPlans && groupId) {
+      setSavedPlansLoading(true);
+      setSavedPlans(await loadTerms(groupId));
+      setSavedPlansLoading(false);
+    }
+  };
+
+  const loadSavedPlan = async (entry: TermEntry) => {
+    if (entry.id === activeTermId) { setShowSavedPlans(false); return; }
+    if (!groupId) return;
+    if (!confirm(`Switch to "${entry.termName}"? Your current term stays saved — you can switch back any time.`)) return;
+    await setActiveTerm(groupId, entry.id);
+    setActiveTermId(entry.id);
+    setTermName(entry.termName || 'Term');
+    setStartDate(entry.startDate);
+    setEndDate(entry.endDate);
+    const r = await loadTermRows('', entry.id);
+    setRows(r);
+    setDatesSet(r.length > 0);
+    localStorage.setItem('programRows', JSON.stringify(r));
+    setShowSavedPlans(false);
+  };
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (savedPlansRef.current && !savedPlansRef.current.contains(e.target as Node)) setShowSavedPlans(false);
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
   const openEventPlanner = (row: TermRow) => {
     router.push(`/events/${row.id}`);
   };
@@ -575,9 +665,18 @@ export default function TermPage() {
         .nav-tag{font-size:11px;font-weight:500;padding:2px 9px;border-radius:4px;color:#fff;}
         .nav-group{color:rgba(255,255,255,0.5);font-size:12px;}
         .nav-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.85);padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;}
+        .saved-plans-dd{position:absolute;top:36px;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.14);min-width:220px;max-height:320px;overflow-y:auto;z-index:50;}
+        .saved-plans-empty{padding:14px;font-size:12px;color:#9ca3af;text-align:center;}
+        .saved-plans-item{display:block;width:100%;text-align:left;padding:10px 14px;border:none;border-bottom:1px solid #f3f4f6;background:#fff;cursor:pointer;font-family:inherit;}
+        .saved-plans-item:last-child{border-bottom:none;}
+        .saved-plans-item:hover{background:#f9fafb;}
+        .sp-name{font-size:12.5px;font-weight:600;color:#111827;display:flex;align-items:center;gap:6px;}
+        .sp-current{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${acc};background:${pale};padding:1px 6px;border-radius:8px;}
+        .sp-meta{font-size:10.5px;color:#9ca3af;margin-top:2px;}
         .ph{background:#fff;border-bottom:1px solid #e5e7eb;padding:18px 24px 0;}
         .bc{font-size:11px;color:#9ca3af;margin-bottom:7px;}
         .ph-title{color:#111827;font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-bottom:2px;}
+        .ph-current{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${acc};background:${pale};padding:2px 8px;border-radius:8px;vertical-align:middle;margin-left:4px;}
         .ph-sub{color:#6b7280;font-size:12px;margin-bottom:14px;}
         .tabs{display:flex;}
         .tab{padding:9px 18px;font-size:12px;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;font-weight:500;}
@@ -719,6 +818,27 @@ export default function TermPage() {
           {config && <span className="nav-group">{config.groupName}</span>}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <button className="nav-btn" onClick={startNewTerm}>+ New term</button>
+          <div style={{position:'relative'}} ref={savedPlansRef}>
+            <button className="nav-btn" onClick={openSavedPlans}>🗂 My terms</button>
+            {showSavedPlans && (
+              <div className="saved-plans-dd">
+                {savedPlansLoading && <div className="saved-plans-empty">Loading…</div>}
+                {!savedPlansLoading && savedPlans.length === 0 && (
+                  <div className="saved-plans-empty">No saved terms yet</div>
+                )}
+                {!savedPlansLoading && savedPlans.map(sp => (
+                  <button key={sp.id} className="saved-plans-item" onClick={()=>loadSavedPlan(sp)}>
+                    <div className="sp-name">
+                      {sp.termName || 'Untitled term'}
+                      {sp.id === activeTermId && <span className="sp-current">Current</span>}
+                    </div>
+                    {sp.createdAt && <div className="sp-meta">Created {new Date(sp.createdAt).toLocaleDateString('en-AU')}</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="nav-btn" onClick={()=>router.push('/help')}>? Help</button>
           <button className="nav-btn" onClick={()=>router.push('/setup')}>⚙ Settings</button>
           <UserMenu />
@@ -727,7 +847,7 @@ export default function TermPage() {
 
       <div className="ph">
         <div className="bc">Home › Term Plans</div>
-        <div className="ph-title">{termName}</div>
+        <div className="ph-title">{termName} {activeTermId && <span className="ph-current">Current</span>}</div>
         <div className="ph-sub">{config?.meetingDay}s {config?fmt12(config.meetingTime):''} · {config?.groupName}</div>
         <div className="tabs">
           <div className="tab on" style={{borderBottomColor:acc}}>Term plan</div>
@@ -741,15 +861,15 @@ export default function TermPage() {
         <div className="setup-card">
           <div className="sf">
             <div className="slabel">Term name</div>
-            <input type="text" className="tf" value={termName} onChange={e=>setTermName(e.target.value)} style={{width:'150px'}}/>
+            <input type="text" className="tf" value={termName} onChange={e=>setTermName(e.target.value)} onBlur={()=>{if(activeTermId) updateTermMeta(activeTermId, termName, startDate, endDate);}} style={{width:'150px'}}/>
           </div>
           <div className="sf">
             <div className="slabel">Term start</div>
-            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/>
+            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} onBlur={()=>{if(activeTermId) updateTermMeta(activeTermId, termName, startDate, endDate);}}/>
           </div>
           <div className="sf">
             <div className="slabel">Term end</div>
-            <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/>
+            <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} onBlur={()=>{if(activeTermId) updateTermMeta(activeTermId, termName, startDate, endDate);}}/>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
             <button className="gen-btn" style={{background:acc}} onClick={buildDates} disabled={!startDate||!endDate}>

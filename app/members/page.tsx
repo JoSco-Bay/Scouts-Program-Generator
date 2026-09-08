@@ -6,7 +6,7 @@ import type { GroupConfig, TermRow, Member, SIAEntry, MilestoneActivity } from "
 
 import {
   loadGroupRecord, loadTermRows, loadMembers,
-  upsertMembers, deleteMemberById,
+  upsertMembers, deleteMemberById, getActiveTerm,
 } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import UserMenu from "@/components/UserMenu";
@@ -102,13 +102,15 @@ export default function MembersPage() {
     if (authLoading) return;
     if (!user) { router.push('/auth'); return; }
     async function load() {
-      const [grp, termRows, memberData] = await Promise.all([
+      const [grp, memberData] = await Promise.all([
         loadGroupRecord(""),
-        loadTermRows(""),
         loadMembers(""),
       ]);
       if (grp) { setGroupId(grp.id); setConfig(grp.config); }
-      setRows(termRows);
+      if (grp) {
+        const activeTerm = await getActiveTerm(grp.id);
+        if (activeTerm) setRows(await loadTermRows("", activeTerm.id));
+      }
       setMembers(memberData);
       setDbLoading(false);
     }

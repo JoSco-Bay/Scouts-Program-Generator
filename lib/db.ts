@@ -102,10 +102,11 @@ function rowFromDb(d: any): TermRow {
   };
 }
 
-function rowToDb(r: TermRow, groupId: string, sortOrder: number) {
+function rowToDb(r: TermRow, groupId: string, termId: string, sortOrder: number) {
   return {
     id:               r.id,
     group_id:         groupId,
+    term_id:          termId,
     date:             r.date,
     time:             r.time,
     topic:            r.topic,
@@ -121,14 +122,15 @@ function rowToDb(r: TermRow, groupId: string, sortOrder: number) {
   };
 }
 
-export async function loadTermRows(_userId: string): Promise<TermRow[]> {
+export async function loadTermRows(_userId: string, termId: string | null): Promise<TermRow[]> {
   const gid = getLocalGroupId();
-  if (!gid) return [];
+  if (!gid || !termId) return [];
   try {
     const { data, error } = await supabase
       .from('term_rows')
       .select('*')
       .eq('group_id', gid)
+      .eq('term_id', termId)
       .order('sort_order');
     if (error) throw error;
     return (data || []).map(rowFromDb);
@@ -138,12 +140,12 @@ export async function loadTermRows(_userId: string): Promise<TermRow[]> {
   }
 }
 
-export async function upsertTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
+export async function upsertTermRows(_userId: string, groupId: string, termId: string, rows: TermRow[]): Promise<void> {
   if (!rows.length) return;
   try {
     const { error } = await supabase
       .from('term_rows')
-      .upsert(rows.map((r, i) => rowToDb(r, groupId, i)), { onConflict: 'id' });
+      .upsert(rows.map((r, i) => rowToDb(r, groupId, termId, i)), { onConflict: 'id' });
     if (error) throw error;
   } catch (e) {
     console.error('Supabase term rows save failed:', e);
@@ -156,44 +158,56 @@ export async function upsertTermRows(_userId: string, groupId: string, rows: Ter
 // per group so a second call always starts after the first has fully finished.
 const replaceTermRowsQueues = new Map<string, Promise<unknown>>();
 
-async function doReplaceTermRows(groupId: string, rows: TermRow[]): Promise<void> {
+async function doReplaceTermRows(groupId: string, termId: string, rows: TermRow[]): Promise<void> {
   // run_sheets.term_row_id has a foreign key onto term_rows.id — deleting a term_row while
   // a run sheet still references it fails with a FK violation (this is what breaks a plan
   // upload once any session has a generated run sheet). Detach those run sheets first
   // (term_row_id is nullable) rather than deleting them, so a leader's generated content
   // survives as an unlinked run sheet instead of blocking the replace or being destroyed.
-  const { error: detachError } = await supabase
-    .from('run_sheets')
-    .update({ term_row_id: null })
-    .eq('group_id', groupId);
-  if (detachError) throw detachError;
+  // Scoped to this term's rows only — another term's run sheets are never touched.
+  const { data: existingRows, error: existingError } = await supabase
+    .from('term_rows')
+    .select('id')
+    .eq('group_id', groupId)
+    .eq('term_id', termId);
+  if (existingError) throw existingError;
+  const existingIds = (existingRows || []).map(r => r.id);
+  if (existingIds.length) {
+    const { error: detachError } = await supabase
+      .from('run_sheets')
+      .update({ term_row_id: null })
+      .in('term_row_id', existingIds);
+    if (detachError) throw detachError;
+  }
 
-  // Delete, then verify the group is actually clear before inserting — a delete that
+  // Delete, then verify this term is actually clear before inserting — a delete that
   // silently leaves rows behind must never let the new set coexist with the old one.
   for (let attempt = 0; ; attempt++) {
-    const { error: delError } = await supabase.from('term_rows').delete().eq('group_id', groupId);
+    const { error: delError } = await supabase.from('term_rows').delete().eq('group_id', groupId).eq('term_id', termId);
     if (delError) throw delError;
     const { count, error: countError } = await supabase
       .from('term_rows')
       .select('id', { count: 'exact', head: true })
-      .eq('group_id', groupId);
+      .eq('group_id', groupId)
+      .eq('term_id', termId);
     if (countError) throw countError;
     if (!count) break;
     if (attempt >= 2) throw new Error(`Could not clear existing term rows for group ${groupId} (${count} still remain after 3 attempts)`);
   }
   if (rows.length) {
-    const { error } = await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, i)));
+    const { error } = await supabase.from('term_rows').insert(rows.map((r, i) => rowToDb(r, groupId, termId, i)));
     if (error) throw error;
   }
 }
 
-export async function replaceTermRows(_userId: string, groupId: string, rows: TermRow[]): Promise<void> {
-  const prior = replaceTermRowsQueues.get(groupId) ?? Promise.resolve();
+export async function replaceTermRows(_userId: string, groupId: string, termId: string, rows: TermRow[]): Promise<void> {
+  const queueKey = `${groupId}:${termId}`;
+  const prior = replaceTermRowsQueues.get(queueKey) ?? Promise.resolve();
   const run = prior.then(
-    () => doReplaceTermRows(groupId, rows),
-    () => doReplaceTermRows(groupId, rows),
+    () => doReplaceTermRows(groupId, termId, rows),
+    () => doReplaceTermRows(groupId, termId, rows),
   ).catch(e => { console.error('Supabase term rows replace failed:', e); });
-  replaceTermRowsQueues.set(groupId, run);
+  replaceTermRowsQueues.set(queueKey, run);
   return run;
 }
 
@@ -479,4 +493,110 @@ export async function saveRunSheet(
   const cacheId = dbId ?? existingDbId ?? sheet.row.id;
   cacheRunSheet(sheet.row.id, { dbId: cacheId, termRowId, entry: sheet });
   return cacheId;
+}
+
+// ── Terms ─────────────────────────────────────────────────────────────────────
+// Each group can have many terms; term_rows.term_id scopes sessions to exactly
+// one of them, so switching terms never deletes or mixes up another term's rows.
+
+export interface TermEntry {
+  id: string;
+  termName: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function termFromDb(d: any): TermEntry {
+  return {
+    id: d.id,
+    termName: d.term_name || '',
+    startDate: d.start_date || '',
+    endDate: d.end_date || '',
+    isActive: d.is_active,
+    createdAt: d.created_at,
+  };
+}
+
+export async function getActiveTerm(groupId: string): Promise<TermEntry | null> {
+  try {
+    const { data, error } = await supabase
+      .from('terms')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? termFromDb(data) : null;
+  } catch (e) {
+    console.error('Supabase getActiveTerm failed:', e);
+    return null;
+  }
+}
+
+export async function loadTerms(groupId: string): Promise<TermEntry[]> {
+  try {
+    const { data, error } = await supabase
+      .from('terms')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(termFromDb);
+  } catch (e) {
+    console.error('Supabase loadTerms failed:', e);
+    return [];
+  }
+}
+
+// Creates a new term and makes it the active one for the group. The previously
+// active term (and its rows) is left completely untouched.
+export async function createTerm(
+  groupId: string,
+  termName: string,
+  startDate: string,
+  endDate: string,
+): Promise<string | null> {
+  try {
+    const { error: deactivateError } = await supabase.from('terms').update({ is_active: false }).eq('group_id', groupId);
+    if (deactivateError) throw deactivateError;
+    const { data, error } = await supabase
+      .from('terms')
+      .insert({ group_id: groupId, term_name: termName, start_date: startDate || null, end_date: endDate || null, is_active: true })
+      .select('id')
+      .maybeSingle();
+    if (error) throw error;
+    return data?.id ?? null;
+  } catch (e) {
+    console.error('Supabase createTerm failed:', e);
+    return null;
+  }
+}
+
+export async function setActiveTerm(groupId: string, termId: string): Promise<void> {
+  try {
+    const { error: deactivateError } = await supabase.from('terms').update({ is_active: false }).eq('group_id', groupId);
+    if (deactivateError) throw deactivateError;
+    const { error } = await supabase.from('terms').update({ is_active: true }).eq('id', termId);
+    if (error) throw error;
+  } catch (e) {
+    console.error('Supabase setActiveTerm failed:', e);
+  }
+}
+
+// Keeps a term's label (name/dates) in sync with what's shown on the page — without
+// this, renaming a term or uploading a plan only updates local state, and the
+// "My terms" list keeps showing whatever name the term had when it was created.
+export async function updateTermMeta(termId: string, termName: string, startDate: string, endDate: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('terms')
+      .update({ term_name: termName, start_date: startDate || null, end_date: endDate || null })
+      .eq('id', termId);
+    if (error) throw error;
+  } catch (e) {
+    console.error('Supabase updateTermMeta failed:', e);
+  }
 }
