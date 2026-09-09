@@ -145,18 +145,13 @@ export default function TermPage() {
     if (!user) { router.push('/auth'); return; }
     async function load() {
       const [grp, members] = await Promise.all([
-        loadGroupRecord(''),
+        loadGroupRecord(user!.id),
         loadMembers(''),
       ]);
-      let gid: string | null = null;
-      if (grp) {
-        setGroupId(grp.id);
-        setConfig(grp.config);
-        gid = grp.id;
-      } else {
-        const cached = localStorage.getItem('groupConfig');
-        if (cached) try { setConfig(JSON.parse(cached)); } catch {}
-      }
+      if (!grp) { router.push('/setup'); return; }
+      setGroupId(grp.id);
+      setConfig(grp.config);
+      const gid = grp.id;
       setMemberNames(members.map(m => `${m.firstName} ${m.lastName}`));
 
       let termRows: TermRow[] = [];
@@ -455,7 +450,7 @@ export default function TermPage() {
         setConfig(data.config);
         localStorage.setItem('groupConfig', JSON.stringify(data.config));
         try {
-          activeGroupId = await saveGroupConfig('', groupId, data.config);
+          activeGroupId = await saveGroupConfig(user!.id, groupId, data.config);
           setGroupId(activeGroupId);
         } catch (err) {
           console.error('Group config sync to Supabase failed during upload:', err);
@@ -573,11 +568,14 @@ export default function TermPage() {
   const createRunSheet = async (row: TermRow) => {
     setCreateErrors(e => { const n = {...e}; delete n[row.id]; return n; });
 
-    const cached = getCachedRunSheetByRowId(row.id);
-    if (cached) { goToRunSheet(row, cached.dbId); return; }
-
     const existing = await loadRunSheetByTermRowId('', row.id);
     if (existing) { goToRunSheet(row, existing.dbId); return; }
+
+    // Supabase is checked first, above — this cache is only a fallback for when
+    // Supabase couldn't be reached at all (loadRunSheetByTermRowId also returns
+    // null in that case, so this catches an offline moment, not a stale duplicate).
+    const cached = getCachedRunSheetByRowId(row.id);
+    if (cached) { goToRunSheet(row, cached.dbId); return; }
 
     if (!config) return;
     setCreatingRowId(row.id);

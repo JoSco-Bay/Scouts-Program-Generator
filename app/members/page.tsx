@@ -103,14 +103,13 @@ export default function MembersPage() {
     if (!user) { router.push('/auth'); return; }
     async function load() {
       const [grp, memberData] = await Promise.all([
-        loadGroupRecord(""),
+        loadGroupRecord(user!.id),
         loadMembers(""),
       ]);
-      if (grp) { setGroupId(grp.id); setConfig(grp.config); }
-      if (grp) {
-        const activeTerm = await getActiveTerm(grp.id);
-        if (activeTerm) setRows(await loadTermRows("", activeTerm.id));
-      }
+      if (!grp) { router.push('/setup'); return; }
+      setGroupId(grp.id); setConfig(grp.config);
+      const activeTerm = await getActiveTerm(grp.id);
+      if (activeTerm) setRows(await loadTermRows("", activeTerm.id));
       setMembers(memberData);
       setDbLoading(false);
     }

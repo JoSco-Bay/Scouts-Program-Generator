@@ -62,7 +62,7 @@ export default function SetupPage() {
     if (authLoading) return;
     if (!user) { router.push('/auth'); return; }
     async function load() {
-      const record = await loadGroupRecord('');
+      const record = await loadGroupRecord(user!.id);
       if (record) {
         setGroupId(record.id);
         const c = record.config;
@@ -107,7 +107,7 @@ export default function SetupPage() {
         leaders: leaders.filter(Boolean),
         members: members.filter(Boolean),
       };
-      const newGroupId = await saveGroupConfig('', groupId, config);
+      const newGroupId = await saveGroupConfig(user!.id, groupId, config);
       setGroupId(newGroupId);
       localStorage.setItem('groupConfig', JSON.stringify(config));
 

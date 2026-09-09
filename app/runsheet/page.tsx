@@ -57,6 +57,7 @@ export default function RunSheetPage() {
   const [generating, setGenerating]   = useState(false);
   const [generated, setGenerated]     = useState(false);
   const [genError, setGenError]       = useState('');
+  const [saveError, setSaveError]     = useState('');
   const [editingId, setEditingId]     = useState<string|null>(null);
   const [editDraft, setEditDraft]     = useState<Partial<ActivityRow>>({});
   const [showRegenPanel, setShowRegenPanel] = useState(false);
@@ -68,9 +69,9 @@ export default function RunSheetPage() {
     if (authLoading) return;
     if (!user) { router.push('/auth'); return; }
     async function load() {
-      // Load group config from Supabase (keyed by groupId in localStorage)
-      const grp = await loadGroupRecord('');
-      if (grp) { setGroupId(grp.id); setConfig(grp.config); }
+      const grp = await loadGroupRecord(user!.id);
+      if (!grp) { router.push('/setup'); return; }
+      setGroupId(grp.id); setConfig(grp.config);
 
       const raw = localStorage.getItem('runSheetSource');
       if (raw) {
@@ -79,19 +80,18 @@ export default function RunSheetPage() {
           setSource(parsed);
           if (parsed.config) setConfig(parsed.config);
 
-          // localStorage is the primary source — check it first, keyed by session row ID
-          const cached = parsed.row?.id ? getCachedRunSheetByRowId(parsed.row.id) : null;
-          if (cached) {
-            setData(cached.entry.data);
-            setGenerated(true);
-            setRunSheetDbId(cached.dbId);
+          // Supabase is checked first in each case below; the localStorage cache
+          // (getCachedRunSheetByRowId) is only consulted as a last-resort fallback
+          // when Supabase has nothing for that lookup — e.g. genuinely offline.
+          let found = false;
           // Case 1: navigated here from /runsheets (has a known dbId)
-          } else if (parsed.runSheetDbId) {
+          if (parsed.runSheetDbId) {
             const sheet = await loadRunSheetById(parsed.runSheetDbId);
             if (sheet) {
               setData(sheet.data);
               setGenerated(true);
               setRunSheetDbId(parsed.runSheetDbId);
+              found = true;
             }
           // Case 2: navigated here from term plan row — check if a sheet already exists
           } else if (parsed.row?.id && parsed.isTermRow) {
@@ -100,6 +100,15 @@ export default function RunSheetPage() {
               setData(existing.entry.data);
               setGenerated(true);
               setRunSheetDbId(existing.dbId);
+              found = true;
+            }
+          }
+          if (!found) {
+            const cached = parsed.row?.id ? getCachedRunSheetByRowId(parsed.row.id) : null;
+            if (cached) {
+              setData(cached.entry.data);
+              setGenerated(true);
+              setRunSheetDbId(cached.dbId);
             }
           }
         } catch (e) {
@@ -112,16 +121,22 @@ export default function RunSheetPage() {
   },[user, authLoading, router]);
 
   // Debounced auto-save whenever data changes (covers generate and user edits).
-  // saveRunSheet always writes to localStorage even if the Supabase save fails,
-  // so this never needs to treat a save as failed.
+  // saveRunSheet now throws if the Supabase write fails — surface that rather
+  // than letting the leader believe an edit saved when it only exists locally.
   useEffect(()=>{
     if (!data || !source?.row) return;
     if (saveScheduled.current) clearTimeout(saveScheduled.current);
     saveScheduled.current = setTimeout(async () => {
       const termRowId = source.isTermRow ? (source.row?.id ?? null) : null;
       const sheet: SavedRunSheet = { data, row: source.row, config: source.config };
-      const id = await saveRunSheet('', groupId ?? '', termRowId, sheet, runSheetDbId ?? undefined);
-      setRunSheetDbId(prev => prev ?? id);
+      try {
+        const id = await saveRunSheet('', groupId ?? '', termRowId, sheet, runSheetDbId ?? undefined);
+        setRunSheetDbId(prev => prev ?? id);
+        setSaveError('');
+      } catch (e) {
+        console.error('Run sheet save failed:', e);
+        setSaveError('Could not save your changes — check your connection. Retrying on the next edit.');
+      }
     }, 800);
     return () => { if (saveScheduled.current) clearTimeout(saveScheduled.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -426,6 +441,7 @@ export default function RunSheetPage() {
 
         {generated && data && (
           <div className="sheet-card">
+            {saveError && <div className="gen-error" style={{margin:'10px 12px 0'}}>⚠ {saveError}</div>}
             <div className="sheet-head">
               <div className="sheet-title">{row?.topic}</div>
               {data.tagline && <div className="sheet-tagline">{data.tagline}</div>}

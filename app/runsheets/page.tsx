@@ -24,7 +24,7 @@ export default function RunSheetsPage() {
       let sheetData: RunSheetEntry[] = [];
       try {
         const [g, s] = await Promise.all([
-          loadGroupRecord(''),
+          loadGroupRecord(user!.id),
           loadRunSheets(''),
         ]);
         grp = g;
@@ -39,7 +39,8 @@ export default function RunSheetsPage() {
           console.error('Failed to read localStorage runsheets cache:', e2);
         }
       }
-      if (grp) setConfig(grp.config);
+      if (!grp) { router.push('/setup'); return; }
+      setConfig(grp.config);
 
       // Scope the list to the active term's sessions — a run sheet with no term_row_id
       // (e.g. a quick-created one, not tied to any session) is excluded too — it never

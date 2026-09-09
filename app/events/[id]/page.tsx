@@ -61,13 +61,9 @@ export default function EventPlannerPage() {
     if (authLoading) return;
     if (!user) { router.push('/auth'); return; }
     async function load() {
-      const grp = await loadGroupRecord('');
-      if (grp) {
-        setConfig(grp.config);
-      } else {
-        const cached = localStorage.getItem('groupConfig');
-        if (cached) try { setConfig(JSON.parse(cached)); } catch {}
-      }
+      const grp = await loadGroupRecord(user!.id);
+      if (!grp) { router.push('/setup'); return; }
+      setConfig(grp.config);
       setEvent(loadEvent(id));
       setDbLoading(false);
     }

@@ -19,28 +19,53 @@ export interface GroupRecord {
   config: GroupConfig;
 }
 
-export async function loadGroupRecord(_userId: string): Promise<GroupRecord | null> {
-  const gid = getLocalGroupId();
-  if (!gid) return null;
+function recordFromDb(data: {
+  id: string; group_name: string; section: string; meeting_day: string;
+  meeting_time: string; leaders: string[] | null; members: string[] | null;
+}): GroupRecord {
+  return {
+    id: data.id,
+    config: {
+      groupName:   data.group_name,
+      section:     data.section as GroupConfig['section'],
+      meetingDay:  data.meeting_day,
+      meetingTime: data.meeting_time,
+      leaders:     data.leaders  || [],
+      members:     data.members  || [],
+    },
+  };
+}
+
+// Looks up the caller's group by their Supabase auth user_id — this is the
+// authoritative lookup, independent of the browser's localStorage. A cleared
+// cache no longer causes a fresh empty group to be created: the same user_id
+// always finds the same group.
+export async function loadGroupRecord(userId: string): Promise<GroupRecord | null> {
+  if (!userId) return null;
   try {
-    const { data, error } = await supabase
-      .from('groups')
-      .select('*')
-      .eq('id', gid)
-      .maybeSingle();
+    const { data, error } = await supabase.from('groups').select('*').eq('user_id', userId).maybeSingle();
     if (error) throw error;
-    if (!data) return null;
-    return {
-      id: data.id,
-      config: {
-        groupName:   data.group_name,
-        section:     data.section,
-        meetingDay:  data.meeting_day,
-        meetingTime: data.meeting_time,
-        leaders:     data.leaders  || [],
-        members:     data.members  || [],
-      },
-    };
+
+    if (data) {
+      setLocalGroupId(data.id); // keep localStorage in sync as a fast local cache only
+      return recordFromDb(data);
+    }
+
+    // One-time migration path: a group created before auth existed has no user_id
+    // yet. If localStorage still points at one (from before a cache clear), claim
+    // it for this user instead of letting them fall through to /setup and create
+    // an unnecessary duplicate. After this runs once, the user_id lookup above
+    // finds it directly and this branch is never needed again for that group.
+    const gid = getLocalGroupId();
+    if (gid) {
+      const unclaimed = await supabase.from('groups').select('*').eq('id', gid).is('user_id', null).maybeSingle();
+      if (unclaimed.data) {
+        const { error: claimError } = await supabase.from('groups').update({ user_id: userId }).eq('id', gid);
+        if (!claimError) return recordFromDb(unclaimed.data);
+      }
+    }
+
+    return null;
   } catch (e) {
     console.error('Supabase group load failed:', e);
     return null;
@@ -48,7 +73,7 @@ export async function loadGroupRecord(_userId: string): Promise<GroupRecord | nu
 }
 
 export async function saveGroupConfig(
-  _userId: string,
+  userId: string,
   groupId: string | null,
   config: GroupConfig,
 ): Promise<string> {
@@ -60,6 +85,7 @@ export async function saveGroupConfig(
     leaders:      config.leaders,
     members:      config.members,
     updated_at:   new Date().toISOString(),
+    ...(userId ? { user_id: userId } : {}),
   };
   try {
     const gid = groupId || getLocalGroupId();
@@ -385,10 +411,13 @@ export function getCachedRunSheetByRowId(rowId: string): RunSheetEntry | null {
   return getRunSheetsCache()[rowId] ?? null;
 }
 
+// Supabase is authoritative: its result replaces the local cache outright rather
+// than being merged into it. The cache is only ever read when Supabase itself
+// can't be reached (see the catch below) — it's a fallback for that moment, not
+// a store that's trusted over the database.
 export async function loadRunSheets(_userId: string): Promise<RunSheetEntry[]> {
-  const cached = getRunSheetsCache();
   const gid = getLocalGroupId();
-  if (!gid) return Object.values(cached);
+  if (!gid) return Object.values(getRunSheetsCache());
   try {
     const { data, error } = await supabase
       .from('run_sheets')
@@ -396,19 +425,17 @@ export async function loadRunSheets(_userId: string): Promise<RunSheetEntry[]> {
       .eq('group_id', gid)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    // localStorage is the primary source: keep cached entries, only add remote
-    // rows for sessions we don't already have cached locally.
-    const merged = { ...cached };
+    const fresh: Record<string, RunSheetEntry> = {};
     for (const d of data || []) {
       const entry: RunSheetEntry = { dbId: d.id, termRowId: d.term_row_id, entry: d.data as SavedRunSheet };
       const rowId = entry.entry.row?.id;
-      if (rowId && !merged[rowId]) merged[rowId] = entry;
+      if (rowId) fresh[rowId] = entry;
     }
-    setRunSheetsCache(merged);
-    return Object.values(merged);
+    setRunSheetsCache(fresh);
+    return Object.values(fresh);
   } catch (e) {
     console.error('Supabase run sheets load failed; using localStorage cache:', e);
-    return Object.values(cached);
+    return Object.values(getRunSheetsCache());
   }
 }
 
@@ -463,6 +490,12 @@ export async function deleteRunSheet(_userId: string, dbId: string, rowId: strin
   setRunSheetsCache(cache);
 }
 
+// Supabase is authoritative here — unlike most lib/db.ts functions, this one
+// THROWS on failure instead of silently degrading, so a leader is actually told
+// when a run sheet didn't save, rather than trusting a localStorage-only copy
+// that's lost the moment the cache is cleared. Callers must catch this and show
+// the failure. localStorage is only written after a confirmed Supabase success,
+// as a read-through cache, never as the save of record.
 export async function saveRunSheet(
   _userId: string,
   groupId: string,
@@ -470,29 +503,23 @@ export async function saveRunSheet(
   sheet: SavedRunSheet,
   existingDbId?: string,
 ): Promise<string> {
-  let dbId: string | undefined;
-  try {
-    if (existingDbId) {
-      const { error } = await supabase.from('run_sheets').update({ data: sheet }).eq('id', existingDbId);
-      if (error) throw error;
-      dbId = existingDbId;
-    } else {
-      const { data, error } = await supabase
-        .from('run_sheets')
-        .insert({ group_id: groupId, term_row_id: termRowId, data: sheet })
-        .select('id')
-        .maybeSingle();
-      if (error) throw error;
-      dbId = data?.id;
-    }
-  } catch (e) {
-    console.error('Supabase run sheet save failed; saved to localStorage only:', e);
+  let dbId: string;
+  if (existingDbId) {
+    const { error } = await supabase.from('run_sheets').update({ data: sheet }).eq('id', existingDbId);
+    if (error) throw new Error(`Failed to save run sheet: ${error.message}`);
+    dbId = existingDbId;
+  } else {
+    const { data, error } = await supabase
+      .from('run_sheets')
+      .insert({ group_id: groupId, term_row_id: termRowId, data: sheet })
+      .select('id')
+      .maybeSingle();
+    if (error) throw new Error(`Failed to save run sheet: ${error.message}`);
+    if (!data) throw new Error('Run sheet not returned after insert');
+    dbId = data.id;
   }
-  // Always save to localStorage, keyed by session row ID — this is the fallback
-  // of record when Supabase is unreachable (see CLAUDE.md).
-  const cacheId = dbId ?? existingDbId ?? sheet.row.id;
-  cacheRunSheet(sheet.row.id, { dbId: cacheId, termRowId, entry: sheet });
-  return cacheId;
+  cacheRunSheet(sheet.row.id, { dbId, termRowId, entry: sheet });
+  return dbId;
 }
 
 // ── Terms ─────────────────────────────────────────────────────────────────────
