@@ -19,14 +19,13 @@ export default function AuthPage() {
   const [error, setError]         = useState('');
   const [working, setWorking]     = useState(false);
   const [signupDone, setSignupDone] = useState(false);
-  const [magicSent, setMagicSent] = useState(false);
 
   useEffect(() => {
     if (!loading && user) router.push('/term');
   }, [user, loading, router]);
 
   const switchMode = (m: 'login' | 'signup' | 'magic') => {
-    setMode(m); setError(''); setSignupDone(false); setMagicSent(false);
+    setMode(m); setError(''); setSignupDone(false);
   };
 
   const submit = async () => {
@@ -35,8 +34,10 @@ export default function AuthPage() {
       setWorking(true); setError('');
       const { error } = await sendMagicLink(email);
       if (error) { setError(error); setWorking(false); return; }
-      setMagicSent(true);
-      setWorking(false);
+      // Navigate to a dedicated URL rather than an inline "sent" state on this
+      // same page — pressing Back here should return to wherever the user came
+      // from, not sit on a route that could be mistaken for a logged-in state.
+      router.push(`/auth/check-email?email=${encodeURIComponent(email)}`);
       return;
     }
     if (!email || !password) { setError('Enter your email and password.'); return; }
@@ -95,12 +96,6 @@ export default function AuthPage() {
               <strong>Check your email!</strong><br/>
               We sent a confirmation link to <strong>{email}</strong>.<br/>
               Click it to activate your account, then sign in here.
-            </div>
-          ) : magicSent ? (
-            <div className="success">
-              <strong>Check your email!</strong><br/>
-              We sent a sign-in link to <strong>{email}</strong>.<br/>
-              Click it to sign in — no password needed.
             </div>
           ) : (
             <>
