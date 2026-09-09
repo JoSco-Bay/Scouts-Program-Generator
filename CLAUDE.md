@@ -10,6 +10,7 @@ A Next.js app (App Router, TypeScript, no external UI library) for Scout leaders
 |------|------|---------|
 | `/` | `app/page.tsx` | Public YouthPath landing page — hero, showcase cards, CTA (see "Landing page" below). Public, no auth guard |
 | `/auth` | `app/auth/page.tsx` | Login / signup (Supabase Auth) |
+| `/auth/set-password` | `app/auth/set-password/page.tsx` | Set/change password — magic-link sign-in redirects here (`?mode` absent, "Welcome!" copy); `UserMenu`'s "Change password" links here with `?mode=change` (different copy, stays on page with a success message instead of redirecting to `/term`). Requires a logged-in session (`updateUser` needs one); redirects to `/auth` if none |
 | `/setup` | `app/setup/page.tsx` | Group config (name, section, day, time, leaders, members) |
 | `/term` | `app/term/page.tsx` | Term planner — date grid, per-row edit form, AI theme generation |
 | `/runsheet` | `app/runsheet/page.tsx` | AI-generated run sheet for a single session |
@@ -43,7 +44,7 @@ Public marketing page for **YouthPath** — hero ("Plan. Track. Develop your you
 | `lib/db.ts` | All Supabase query functions (groups, term_rows, terms, members, run_sheets) |
 | `lib/auth-context.tsx` | `AuthProvider` + `useAuth()` hook — wraps app in `layout.tsx`; exposes `signIn`, `signUp`, `sendMagicLink`, `signOut` |
 | `lib/runsheetGen.ts` | `generateRunSheet()` — shared AI call used by both the `/term` "Create" button and `/runsheet`'s "Regenerate" (with optional free-text `instructions`) |
-| `components/UserMenu.tsx` | Nav-bar auth widget — email + logout on desktop, an avatar-circle-with-dropdown below 640px |
+| `components/UserMenu.tsx` | Nav-bar auth widget — a single dropdown trigger (email text above 640px, avatar circle below) opening a menu with "Change password" (→ `/auth/set-password?mode=change`) and "Log out" |
 
 ## Shared types (`lib/types.ts`)
 
