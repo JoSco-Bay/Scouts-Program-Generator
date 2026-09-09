@@ -155,11 +155,6 @@ export default function AuthPage() {
                   <span onClick={() => switchMode('magic')}>Email me a magic link instead</span>
                 </div>
               )}
-              {mode === 'signup' && (
-                <div className="hint">
-                  Tip: disable email confirmation in Supabase → Authentication → Settings if you want to skip the verify step.
-                </div>
-              )}
             </>
           )}
         </div>
