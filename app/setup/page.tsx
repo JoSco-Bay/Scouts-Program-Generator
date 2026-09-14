@@ -127,7 +127,7 @@ export default function SetupPage() {
           id: genId(),
           firstName,
           lastName,
-          age: 0,
+          dateOfBirth: '',
           yearJoined: new Date().getFullYear(),
           attendance: {},
           oas: {},

@@ -90,7 +90,7 @@ export interface Member {
   id: string;
   firstName: string;
   lastName: string;
-  age: number;
+  dateOfBirth: string;
   yearJoined: number;
   attendance: Record<string, boolean>;
   oas: Record<string, number>;

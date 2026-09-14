@@ -48,6 +48,16 @@ function formatSIADate(d: string): string {
   return d;
 }
 
+function calcAge(dateOfBirth: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return null;
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
 function calcAttendancePct(member: Member, rows: TermRow[]): number {
   const sessions = rows.filter(r=>r.rowType==='session');
   if (!sessions.length) return 0;
@@ -88,9 +98,9 @@ export default function MembersPage() {
   const [view, setView]           = useState<'list'|'attendance'|'profile'>('list');
   const [selectedId, setSelectedId]   = useState<string|null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
+  const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',dateOfBirth:'',yearJoined:new Date().getFullYear().toString()});
   const [editingMemberId, setEditingMemberId] = useState<string|null>(null);
-  const [editMemberDraft, setEditMemberDraft] = useState({firstName:'',lastName:'',age:'',yearJoined:''});
+  const [editMemberDraft, setEditMemberDraft] = useState({firstName:'',lastName:'',dateOfBirth:'',yearJoined:''});
   const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
   const [editSIAIdx, setEditSIAIdx] = useState<number | null>(null);
@@ -135,12 +145,12 @@ export default function MembersPage() {
       id: genId(),
       firstName: addDraft.firstName.trim(),
       lastName:  addDraft.lastName.trim(),
-      age:        parseInt(addDraft.age)||0,
+      dateOfBirth: addDraft.dateOfBirth,
       yearJoined: parseInt(addDraft.yearJoined)||new Date().getFullYear(),
       attendance: {}, oas: {}, sia: [], milestoneActivities: [], milestonesAwarded: [], peakAwarded: false,
     };
     saveMembers([...members, newM]);
-    setAddDraft({firstName:'',lastName:'',age:'',yearJoined:new Date().getFullYear().toString()});
+    setAddDraft({firstName:'',lastName:'',dateOfBirth:'',yearJoined:new Date().getFullYear().toString()});
     setShowAddForm(false);
   };
 
@@ -148,7 +158,7 @@ export default function MembersPage() {
     setEditMemberDraft({
       firstName: m.firstName,
       lastName: m.lastName,
-      age: m.age ? String(m.age) : '',
+      dateOfBirth: m.dateOfBirth || '',
       yearJoined: m.yearJoined ? String(m.yearJoined) : '',
     });
     setEditingMemberId(m.id);
@@ -159,7 +169,7 @@ export default function MembersPage() {
       ...m,
       firstName: editMemberDraft.firstName.trim(),
       lastName: editMemberDraft.lastName.trim(),
-      age: parseInt(editMemberDraft.age) || 0,
+      dateOfBirth: editMemberDraft.dateOfBirth,
       yearJoined: parseInt(editMemberDraft.yearJoined) || new Date().getFullYear(),
     }));
     setEditingMemberId(null);
@@ -472,7 +482,7 @@ export default function MembersPage() {
                 <div className="add-grid">
                   <div><div className="af-label">First name</div><input className="af-input" value={addDraft.firstName} onChange={e=>setAddDraft(d=>({...d,firstName:e.target.value}))} placeholder="e.g. Lily"/></div>
                   <div><div className="af-label">Last name</div><input className="af-input" value={addDraft.lastName} onChange={e=>setAddDraft(d=>({...d,lastName:e.target.value}))} placeholder="e.g. Mitchell"/></div>
-                  <div><div className="af-label">Age</div><input className="af-input" type="number" min="4" max="18" value={addDraft.age} onChange={e=>setAddDraft(d=>({...d,age:e.target.value}))} placeholder="7"/></div>
+                  <div><div className="af-label">Date of birth</div><input className="af-input" type="date" value={addDraft.dateOfBirth} onChange={e=>setAddDraft(d=>({...d,dateOfBirth:e.target.value}))}/></div>
                   <div><div className="af-label">Year joined</div><input className="af-input" type="number" min="2000" max="2035" value={addDraft.yearJoined} onChange={e=>setAddDraft(d=>({...d,yearJoined:e.target.value}))}/></div>
                 </div>
                 <div className="af-actions">
@@ -508,7 +518,7 @@ export default function MembersPage() {
                       <div className="avatar" style={{background:avatarColour(idx,acc)}}>{initials(m)}</div>
                       <div>
                         <div className="m-name">{m.firstName} {m.lastName}</div>
-                        <div className="m-meta">Age {m.age||'?'} · Joined {m.yearJoined}</div>
+                        <div className="m-meta">Age {calcAge(m.dateOfBirth)??'?'} · Joined {m.yearJoined}</div>
                       </div>
                       <div className="attend-wrap">
                         <div className="attend-pct" style={{color:pctColour}}>{pct}%</div>
@@ -537,7 +547,7 @@ export default function MembersPage() {
                         <div className="add-grid">
                           <div><div className="af-label">First name</div><input className="af-input" value={editMemberDraft.firstName} onChange={e=>setEditMemberDraft(d=>({...d,firstName:e.target.value}))}/></div>
                           <div><div className="af-label">Last name</div><input className="af-input" value={editMemberDraft.lastName} onChange={e=>setEditMemberDraft(d=>({...d,lastName:e.target.value}))}/></div>
-                          <div><div className="af-label">Age</div><input className="af-input" type="number" min="4" max="18" value={editMemberDraft.age} onChange={e=>setEditMemberDraft(d=>({...d,age:e.target.value}))}/></div>
+                          <div><div className="af-label">Date of birth</div><input className="af-input" type="date" value={editMemberDraft.dateOfBirth} onChange={e=>setEditMemberDraft(d=>({...d,dateOfBirth:e.target.value}))}/></div>
                           <div><div className="af-label">Year joined</div><input className="af-input" type="number" min="2000" max="2035" value={editMemberDraft.yearJoined} onChange={e=>setEditMemberDraft(d=>({...d,yearJoined:e.target.value}))}/></div>
                         </div>
                         <div className="af-actions">
@@ -623,7 +633,7 @@ export default function MembersPage() {
               <div className="profile-avatar" style={{background:avatarColour(members.indexOf(selected),acc)}}>{initials(selected)}</div>
               <div style={{flex:1}}>
                 <div className="profile-name">{selected.firstName} {selected.lastName}</div>
-                <div className="profile-meta">Age {selected.age||'?'} · Joined {selected.yearJoined} · {section}</div>
+                <div className="profile-meta">Age {calcAge(selected.dateOfBirth)??'?'} · Joined {selected.yearJoined} · {section}</div>
                 <div className="profile-stats">
                   {[
                     {label:'Attendance', val:`${calcAttendancePct(selected,rows)}%`},
@@ -647,7 +657,7 @@ export default function MembersPage() {
                   <div key={stream} className="oas-stream">
                     <div className="oas-stream-name">{stream}</div>
                     <div className="oas-stages">
-                      {[1,2,3,4,5].map(stage=>(
+                      {[1,2,3,4,5,6,7,8,9].map(stage=>(
                         <button key={stage} className={`stage-btn ${(selected.oas[stream]||0)>=stage?'earned':''}`}
                           onClick={()=>toggleOAS(selected.id,stream,stage)} title={`Stage ${stage}`}>
                           {stage}
