@@ -19,9 +19,8 @@ const PEAK_AWARDS: Record<string,string> = {
 };
 
 const OAS_STREAMS = [
-  'Bushcraft','Bushwalking','Camping','Aquatics',
+  'Bushcraft','Bushwalking','Camping','Aquatics','Boating',
   'Cycling','Paddling','Vertical','Alpine',
-  'Community','Creative','Personal Growth',
 ];
 
 const SIA_CATEGORIES = [
