@@ -91,7 +91,10 @@ export interface Member {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  yearJoined: number;
+  dateJoined: string;
+  // Legacy members created before dateJoined existed only have this. Fall back to it
+  // (year-only precision) when dateJoined is empty.
+  yearJoined?: number;
   attendance: Record<string, boolean>;
   oas: Record<string, number>;
   sia: SIAEntry[];

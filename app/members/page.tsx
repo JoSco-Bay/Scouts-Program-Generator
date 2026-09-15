@@ -58,6 +58,41 @@ function calcAge(dateOfBirth: string): number | null {
   return age;
 }
 
+// Whole months elapsed since dateOfBirth/dateJoined (YYYY-MM-DD), or null if not a valid date.
+function monthsSince(dateStr: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const d = new Date(dateStr);
+  const today = new Date();
+  let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
+  if (today.getDate() < d.getDate()) months--;
+  return Math.max(0, months);
+}
+
+// Short "how long ago" for the member list. Switches from relative phrasing to an
+// absolute month/year once membership is long enough that "N years ago" stops being
+// the more readable option — mirrors the two example formats requested for this field.
+function formatJoinedShort(m: Member): string {
+  const months = monthsSince(m.dateJoined);
+  if (months === null) return m.yearJoined ? `Joined ${m.yearJoined}` : 'Joined —';
+  if (months < 1) return 'Joined this month';
+  if (months < 12) return `Joined ${months} month${months === 1 ? '' : 's'} ago`;
+  if (months < 24) { const y = Math.floor(months / 12); return `Joined ${y} year${y === 1 ? '' : 's'} ago`; }
+  return `Joined ${new Date(m.dateJoined).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}`;
+}
+
+// Precise "time in Scouts" for the profile view, e.g. "2 years 3 months".
+function formatTimeInScouts(m: Member): string {
+  const months = monthsSince(m.dateJoined);
+  if (months === null) return m.yearJoined ? `Since ${m.yearJoined}` : 'Joined —';
+  if (months < 1) return 'Joined this month';
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  const parts: string[] = [];
+  if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`);
+  if (rem) parts.push(`${rem} month${rem === 1 ? '' : 's'}`);
+  return parts.join(' ');
+}
+
 function calcAttendancePct(member: Member, rows: TermRow[]): number {
   const sessions = rows.filter(r=>r.rowType==='session');
   if (!sessions.length) return 0;
@@ -98,9 +133,9 @@ export default function MembersPage() {
   const [view, setView]           = useState<'list'|'attendance'|'profile'>('list');
   const [selectedId, setSelectedId]   = useState<string|null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',dateOfBirth:'',yearJoined:new Date().getFullYear().toString()});
+  const [addDraft, setAddDraft]   = useState({firstName:'',lastName:'',dateOfBirth:'',dateJoined:new Date().toISOString().slice(0,10)});
   const [editingMemberId, setEditingMemberId] = useState<string|null>(null);
-  const [editMemberDraft, setEditMemberDraft] = useState({firstName:'',lastName:'',dateOfBirth:'',yearJoined:''});
+  const [editMemberDraft, setEditMemberDraft] = useState({firstName:'',lastName:'',dateOfBirth:'',dateJoined:''});
   const [addSIA, setAddSIA]       = useState({category:'adventure',projectName:'',status:'planning',notes:'',dateCompleted:''});
   const [showSIAForm, setShowSIAForm] = useState(false);
   const [editSIAIdx, setEditSIAIdx] = useState<number | null>(null);
@@ -146,11 +181,11 @@ export default function MembersPage() {
       firstName: addDraft.firstName.trim(),
       lastName:  addDraft.lastName.trim(),
       dateOfBirth: addDraft.dateOfBirth,
-      yearJoined: parseInt(addDraft.yearJoined)||new Date().getFullYear(),
+      dateJoined: addDraft.dateJoined,
       attendance: {}, oas: {}, sia: [], milestoneActivities: [], milestonesAwarded: [], peakAwarded: false,
     };
     saveMembers([...members, newM]);
-    setAddDraft({firstName:'',lastName:'',dateOfBirth:'',yearJoined:new Date().getFullYear().toString()});
+    setAddDraft({firstName:'',lastName:'',dateOfBirth:'',dateJoined:new Date().toISOString().slice(0,10)});
     setShowAddForm(false);
   };
 
@@ -159,7 +194,7 @@ export default function MembersPage() {
       firstName: m.firstName,
       lastName: m.lastName,
       dateOfBirth: m.dateOfBirth || '',
-      yearJoined: m.yearJoined ? String(m.yearJoined) : '',
+      dateJoined: m.dateJoined || '',
     });
     setEditingMemberId(m.id);
   };
@@ -170,7 +205,7 @@ export default function MembersPage() {
       firstName: editMemberDraft.firstName.trim(),
       lastName: editMemberDraft.lastName.trim(),
       dateOfBirth: editMemberDraft.dateOfBirth,
-      yearJoined: parseInt(editMemberDraft.yearJoined) || new Date().getFullYear(),
+      dateJoined: editMemberDraft.dateJoined,
     }));
     setEditingMemberId(null);
   };
@@ -333,7 +368,7 @@ export default function MembersPage() {
         .view-btn{font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
         .view-btn:hover{background:${pale};}
         .add-form{background:#f9fafb;border-top:1px solid #f3f4f6;padding:14px 16px;}
-        .add-grid{display:grid;grid-template-columns:1fr 1fr 150px 100px;gap:8px;margin-bottom:10px;}
+        .add-grid{display:grid;grid-template-columns:1fr 1fr 150px 150px;gap:8px;margin-bottom:10px;}
         .af-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-bottom:3px;}
         .af-input{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 9px;font-size:12.5px;color:#111827;font-family:inherit;outline:none;}
         .af-input:focus{border-color:${acc};}
@@ -483,7 +518,7 @@ export default function MembersPage() {
                   <div><div className="af-label">First name</div><input className="af-input" value={addDraft.firstName} onChange={e=>setAddDraft(d=>({...d,firstName:e.target.value}))} placeholder="e.g. Lily"/></div>
                   <div><div className="af-label">Last name</div><input className="af-input" value={addDraft.lastName} onChange={e=>setAddDraft(d=>({...d,lastName:e.target.value}))} placeholder="e.g. Mitchell"/></div>
                   <div><div className="af-label">Date of birth</div><input className="af-input" type="date" value={addDraft.dateOfBirth} onChange={e=>setAddDraft(d=>({...d,dateOfBirth:e.target.value}))}/></div>
-                  <div><div className="af-label">Year joined</div><input className="af-input" type="number" min="2000" max="2035" value={addDraft.yearJoined} onChange={e=>setAddDraft(d=>({...d,yearJoined:e.target.value}))}/></div>
+                  <div><div className="af-label">Date joined</div><input className="af-input" type="date" value={addDraft.dateJoined} onChange={e=>setAddDraft(d=>({...d,dateJoined:e.target.value}))}/></div>
                 </div>
                 <div className="af-actions">
                   <button className="btn-pri" onClick={addMember}>Add member</button>
@@ -518,7 +553,7 @@ export default function MembersPage() {
                       <div className="avatar" style={{background:avatarColour(idx,acc)}}>{initials(m)}</div>
                       <div>
                         <div className="m-name">{m.firstName} {m.lastName}</div>
-                        <div className="m-meta">Age {calcAge(m.dateOfBirth)??'?'} · Joined {m.yearJoined}</div>
+                        <div className="m-meta">Age {calcAge(m.dateOfBirth)??'?'} · {formatJoinedShort(m)}</div>
                       </div>
                       <div className="attend-wrap">
                         <div className="attend-pct" style={{color:pctColour}}>{pct}%</div>
@@ -548,7 +583,7 @@ export default function MembersPage() {
                           <div><div className="af-label">First name</div><input className="af-input" value={editMemberDraft.firstName} onChange={e=>setEditMemberDraft(d=>({...d,firstName:e.target.value}))}/></div>
                           <div><div className="af-label">Last name</div><input className="af-input" value={editMemberDraft.lastName} onChange={e=>setEditMemberDraft(d=>({...d,lastName:e.target.value}))}/></div>
                           <div><div className="af-label">Date of birth</div><input className="af-input" type="date" value={editMemberDraft.dateOfBirth} onChange={e=>setEditMemberDraft(d=>({...d,dateOfBirth:e.target.value}))}/></div>
-                          <div><div className="af-label">Year joined</div><input className="af-input" type="number" min="2000" max="2035" value={editMemberDraft.yearJoined} onChange={e=>setEditMemberDraft(d=>({...d,yearJoined:e.target.value}))}/></div>
+                          <div><div className="af-label">Date joined</div><input className="af-input" type="date" value={editMemberDraft.dateJoined} onChange={e=>setEditMemberDraft(d=>({...d,dateJoined:e.target.value}))}/></div>
                         </div>
                         <div className="af-actions">
                           <button className="btn-pri" onClick={()=>saveEditMember(m.id)}>Save</button>
@@ -633,7 +668,7 @@ export default function MembersPage() {
               <div className="profile-avatar" style={{background:avatarColour(members.indexOf(selected),acc)}}>{initials(selected)}</div>
               <div style={{flex:1}}>
                 <div className="profile-name">{selected.firstName} {selected.lastName}</div>
-                <div className="profile-meta">Age {calcAge(selected.dateOfBirth)??'?'} · Joined {selected.yearJoined} · {section}</div>
+                <div className="profile-meta">Age {calcAge(selected.dateOfBirth)??'?'} · {formatTimeInScouts(selected)} · {section}</div>
                 <div className="profile-stats">
                   {[
                     {label:'Attendance', val:`${calcAttendancePct(selected,rows)}%`},

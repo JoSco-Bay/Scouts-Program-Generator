@@ -128,7 +128,7 @@ export default function SetupPage() {
           firstName,
           lastName,
           dateOfBirth: '',
-          yearJoined: new Date().getFullYear(),
+          dateJoined: new Date().toISOString().slice(0, 10),
           attendance: {},
           oas: {},
           sia: [],
