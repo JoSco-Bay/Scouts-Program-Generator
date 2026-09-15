@@ -333,7 +333,7 @@ export default function MembersPage() {
         .view-btn{font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid ${acc};color:${acc};background:transparent;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;}
         .view-btn:hover{background:${pale};}
         .add-form{background:#f9fafb;border-top:1px solid #f3f4f6;padding:14px 16px;}
-        .add-grid{display:grid;grid-template-columns:1fr 1fr 80px 100px;gap:8px;margin-bottom:10px;}
+        .add-grid{display:grid;grid-template-columns:1fr 1fr 150px 100px;gap:8px;margin-bottom:10px;}
         .af-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;margin-bottom:3px;}
         .af-input{width:100%;border:1px solid #d1d5db;border-radius:5px;padding:6px 9px;font-size:12.5px;color:#111827;font-family:inherit;outline:none;}
         .af-input:focus{border-color:${acc};}
