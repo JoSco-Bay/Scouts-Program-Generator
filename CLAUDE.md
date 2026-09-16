@@ -4,6 +4,11 @@
 
 A Next.js app (App Router, TypeScript, no external UI library) for Scout leaders to plan terms, generate AI run sheets, and track member progress. Public-facing as **YouthPath** (youthpath.app) via the landing page at `/`; internal code/branding elsewhere still says "Scout Program Builder." All data is stored in **Supabase**. Login is live via Supabase Auth (email/password + magic link) with auth guards on the core app pages — but data is still scoped by a `groupId` stored in the browser's localStorage, not by the logged-in user's `auth.uid()`, and RLS remains disabled. See "Auth approach" below — this half-migrated state is the biggest source of subtle bugs in the app right now.
 
+## Competitive landscape
+
+- **Tussock** (tussock.group) — free, open source, integrates with Terrain, ships a pre-built library of session/night plans. No AI generation.
+- YouthPath's differentiator vs. Tussock is AI-generated content (term themes, run sheets) and AI-assisted term planning, not a static pre-built library.
+
 ## Key pages and routes
 
 | Path | File | Purpose |
@@ -200,6 +205,11 @@ Each member row has an "✏ Edit" button (next to View/Delete) that opens an inl
 - `dateCompleted` is a manual `<input type="date">` on both the add and edit forms — it is never auto-set when status is changed to `complete`. Stored as `YYYY-MM-DD`; `formatSIADate()` renders it as `en-AU` for display and falls back to the raw string for older entries stored as locale-formatted text.
 - Delete button on an SIA entry is labelled "Delete" (plain text, not an emoji — emoji glyphs render unreliably as tofu/"II" in some environments).
 
+## OAS streams and Challenge Areas (corrected 2026-09-17)
+
+- **OAS streams** — the 9 official streams: Bushcraft, Bushwalking, Camping (core), Alpine, Aquatics, Boating, Cycling, Paddling, Vertical (specialist). Defined as `OAS_STREAMS` independently in both `app/members/page.tsx` (OAS tracker, 9 stages each) and `app/term/page.tsx` (AI theme panel's "OAS focus areas" chips, and the fallback list `/api/generate-term` puts in its prompt when no chips are selected) — **not a shared constant**, so a future change to the stream list needs to be made in both files. `Community`, `Creative`, and `Personal Growth` were removed from this list (they are Challenge Areas, not OAS streams — see below); `Boating` was missing and has been added.
+- **Challenge Areas** — a separate 4-item list: `Community`, `Creative`, `Outdoors`, `Personal Growth`. Defined as `CHALLENGE_AREAS` in `app/term/page.tsx` only, shown as its own "Challenge areas for this term" section in the AI theme panel (below OAS focus areas), with the explanation "Select to ensure your term has a balanced program across all four areas." Selected areas are sent to `/api/generate-term` as `challengeAreas`, a field separate from `oasStreams`, and folded into the prompt as its own line.
+
 ## Run sheet flow
 
 `/runsheet` **never shows a "generate" screen** — it only ever displays an existing run sheet, or a "No run sheet found" fallback linking back to `/term`. All generation now happens on `/term`'s "Create" button:
@@ -238,7 +248,7 @@ On `/runsheet`, the toolbar's "↺ Regenerate" opens a small panel with an optio
 - [x] AI theme/topic suggestions for the term
 - [x] Run sheet generation with GPT-4o (activities, OAS tags, recipes)
 - [x] Leader notes (`sessionNotes`) passed to run sheet AI prompt
-- [x] Members tab — attendance grid, OAS tracker (11 streams × 5 stages), SIA log, milestone tracker
+- [x] Members tab — attendance grid, OAS tracker (9 streams × 9 stages — see "OAS streams and Challenge Areas" below), SIA log, milestone tracker
 - [x] Milestone tracking: participate auto-counted from attendance; manual log only for Assist and Lead
 - [x] Leader dropdown in term edit form (config.leaders + config.members + memberNames)
 - [x] Asst. patrol leader multi-select checkbox list (comma-separated, deduped, trimmed)
@@ -284,3 +294,9 @@ On `/runsheet`, the toolbar's "↺ Regenerate" opens a small panel with an optio
 - [ ] Migrate `group_id` identity from localStorage to `user_id` per-user scoping — **next session priority**
 - [ ] Add `WITH CHECK` INSERT policy on `groups` table
 - [ ] Make run sheet saves Supabase-authoritative instead of localStorage-first (see "Known bugs — open") — **next session priority**
+
+### Phase 6 — AI content depth (not started, nothing merged into this repo yet)
+
+- [ ] Rewrite `app/api/generate-runsheet/route.ts` and `app/api/generate-term/route.ts` with a fuller Scouts Australia knowledge base. Drafted outside this repo (a different session/machine) — as of 2026-09-17 there is no trace of these drafts in this working tree, any local branch, or git history, so they still need to be brought in, reviewed, and committed before they're real
+- [ ] Add SPICES tags, an activity type, and a duration to run sheet activities — `ActivityRow` in `lib/types.ts` currently has none of these fields
+- [ ] Continue building out the OAS knowledge base for the AI prompts — Bushcraft Stage 1-6 requirements were drafted outside this repo (same caveat as above), not yet present here
