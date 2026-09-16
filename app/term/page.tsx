@@ -16,7 +16,8 @@ import type { RunSheetEntry, TermEntry } from "@/lib/db";
 import { loadEvent, saveEvent, deleteEvent } from "@/lib/events";
 import { generateRunSheet } from "@/lib/runsheetGen";
 
-const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Cycling','Paddling','Vertical','Alpine','Community','Creative','Personal Growth'];
+const OAS_STREAMS = ['Bushcraft','Bushwalking','Camping','Aquatics','Boating','Cycling','Paddling','Vertical','Alpine'];
+const CHALLENGE_AREAS = ['Community','Creative','Outdoors','Personal Growth'];
 
 const COLUMN_DEFS = [
   { key:'date',           label:'Date',          width:'9%',  always:true },
@@ -109,6 +110,7 @@ export default function TermPage() {
   const [showMultiDayPanel, setShowMultiDayPanel] = useState(false);
   const [multiDayDraft, setMultiDayDraft] = useState({eventName:'',startDate:'',endDate:'',location:'',oasFocus:'',notes:'',consentRequired:false});
   const [selectedOAS, setSelectedOAS]       = useState<string[]>([]);
+  const [selectedChallengeAreas, setSelectedChallengeAreas] = useState<string[]>([]);
   const [extraThemeNotes, setExtraThemeNotes] = useState('');
   const [extraEventsDraft, setExtraEventsDraft] = useState<{name:string;date:string;time:string;location:string;consent:boolean}[]>([]);
   const [aiError, setAiError] = useState('');
@@ -358,6 +360,10 @@ export default function TermPage() {
     setSelectedOAS(s=>s.includes(stream)?s.filter(x=>x!==stream):[...s,stream]);
   };
 
+  const toggleChallengeArea = (area: string) => {
+    setSelectedChallengeAreas(s=>s.includes(area)?s.filter(x=>x!==area):[...s,area]);
+  };
+
   const addExtraEventDraft = () => setExtraEventsDraft(d=>[...d,{name:'',date:'',time:'',location:'',consent:false}]);
   const updateExtraEventDraft = (i: number, field: string, value: string|boolean) => setExtraEventsDraft(d=>d.map((e,idx)=>idx===i?{...e,[field]:value}:e));
   const removeExtraEventDraft = (i: number) => setExtraEventsDraft(d=>d.filter((_,idx)=>idx!==i));
@@ -526,7 +532,7 @@ export default function TermPage() {
       const res = await fetch('/api/generate-term',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({section:config.section,termName,rowCount:rows.filter(r=>r.rowType==='session').length,oasStreams:selectedOAS,notes:extraThemeNotes}),
+        body:JSON.stringify({section:config.section,termName,rowCount:rows.filter(r=>r.rowType==='session').length,oasStreams:selectedOAS,challengeAreas:selectedChallengeAreas,notes:extraThemeNotes}),
       });
       if (!res.ok) { const text = await res.text(); throw new Error(`API error ${res.status}: ${text.slice(0,200)}`); }
       const data = await res.json();
@@ -936,6 +942,15 @@ export default function TermPage() {
                 <div className="oas-grid">
                   {OAS_STREAMS.map(s=>(
                     <button key={s} className={`oas-chip ${selectedOAS.includes(s)?'on':''}`} onClick={()=>toggleOAS(s)}>{s}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="tp-section">
+                <div className="tp-label">Challenge areas for this term (optional)</div>
+                <div className="theme-panel-desc" style={{marginBottom:'8px'}}>Select to ensure your term has a balanced program across all four areas.</div>
+                <div className="oas-grid">
+                  {CHALLENGE_AREAS.map(a=>(
+                    <button key={a} className={`oas-chip ${selectedChallengeAreas.includes(a)?'on':''}`} onClick={()=>toggleChallengeArea(a)}>{a}</button>
                   ))}
                 </div>
               </div>

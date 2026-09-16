@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const openai = new OpenAI({ apiKey });
 
     const body = await req.json();
-    const { section, termName, rowCount, oasStreams, notes } = body;
+    const { section, termName, rowCount, oasStreams, challengeAreas, notes } = body;
 
     if (!rowCount || rowCount < 1) {
       return Response.json({ error: "No sessions to generate themes for. Generate dates first." }, { status: 400 });
@@ -17,13 +17,18 @@ export async function POST(req: Request) {
 
     const oasLine = (oasStreams && oasStreams.length > 0)
       ? `Focus on these OAS streams across the term: ${oasStreams.join(', ')}.`
-      : `Spread across a good variety of OAS streams: Bushcraft, Bushwalking, Camping, Aquatics, Cycling, Paddling, Vertical, Alpine, Community, Creative, Personal Growth.`;
+      : `Spread across a good variety of OAS streams: Bushcraft, Bushwalking, Camping, Aquatics, Boating, Cycling, Paddling, Vertical, Alpine.`;
+
+    const challengeLine = (challengeAreas && challengeAreas.length > 0)
+      ? `Also aim for a balanced program across these Challenge Areas: ${challengeAreas.join(', ')}.`
+      : '';
 
     const notesLine = notes ? `Additional context from the leader: ${notes}` : '';
 
     const prompt = `Generate ${rowCount} weekly session ideas for a ${section} Scout group, for ${termName}.
 
 ${oasLine}
+${challengeLine}
 ${notesLine}
 
 For each of the ${rowCount} sessions, provide:
