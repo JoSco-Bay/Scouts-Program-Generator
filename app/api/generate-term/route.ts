@@ -1,5 +1,43 @@
 import OpenAI from "openai";
 
+const SCOUTS_AUSTRALIA_KNOWLEDGE = `
+You are an expert Scouts Australia program planner. Generate term programs that align with official Scouts Australia guidelines and the Scout Method.
+
+THE SCOUT METHOD (reflect in term planning):
+1. Learning by Doing — practical hands-on activities every week
+2. Community Involvement — include community service activities
+3. Nature and the Outdoors — significant outdoor component across the term
+4. Promise and Law — referenced at every session
+5. Patrol System — activities designed for small group teamwork
+6. Personal Progression — build skills progressively across the term
+7. Symbolic Framework — consistent Opening/Closing Parade each week
+8. Youth Leading Adults Supporting — Participate/Assist/Lead opportunities each session
+
+CHALLENGE AREAS — ensure a BALANCED term across all 4:
+- Community: service to community, helping others, working together
+- Creative: arts, crafts, music, performance, innovation, making things
+- Outdoors: adventure, nature, outdoor skills, physical challenge
+- Personal Growth: self-improvement, reflection, values, resilience
+
+OAS STREAMS (9 official, Stages 1-9):
+Core: Bushcraft, Bushwalking, Camping
+Specialist: Alpine, Aquatics, Boating, Cycling, Paddling, Vertical
+
+SECTION CHARACTERISTICS:
+Joey Scouts (5-8 yrs): Simple, fun, hands-on, movement-based, short attention spans, discovering adventure, highly supportive, adults encourage
+Cub Scouts (8-11 yrs): More variety, beginning to take risks, input into planning, new challenges, increasing independence
+Scouts (11-15 yrs): Self-managing, leading activities, own interests drive program, responsible risk taking
+Venturer Scouts (15-18 yrs): Completely self-directed, drive own program, push personal boundaries
+
+TERM PLANNING PRINCIPLES:
+- Build progression across the term — early sessions introduce skills, later sessions develop them
+- Mix Challenge Areas each week — aim for variety not repetition
+- Include at least one multi-day event or special event per term
+- Balance indoor (Hall) and outdoor (Local Park, Reserve, Camp) sessions
+- End of term should have a celebration or showcase session
+- If building to a camp — last 2-3 weeks should include camp prep activities
+`;
+
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -21,7 +59,7 @@ export async function POST(req: Request) {
 
     const challengeLine = (challengeAreas && challengeAreas.length > 0)
       ? `Also aim for a balanced program across these Challenge Areas: ${challengeAreas.join(', ')}.`
-      : '';
+      : `Ensure a balanced mix of all 4 Challenge Areas across the term: Community, Creative, Outdoors, Personal Growth.`;
 
     const notesLine = notes ? `Additional context from the leader: ${notes}` : '';
 
@@ -51,7 +89,7 @@ The "suggestions" array must have exactly ${rowCount} items, in a sensible progr
       max_tokens: 2000,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are an expert Scouts Australia program planner. Always return valid JSON only, no markdown fences, no explanation text." },
+        { role: "system", content: SCOUTS_AUSTRALIA_KNOWLEDGE },
         { role: "user", content: prompt },
       ],
     });
